@@ -1,12 +1,12 @@
 A collection of AWS Architectures and automation code that deploy them   
   
 Many of these use Tungston Fabric or Contrail as the SDN. The associated config can be removed if SDN is not your thing.   
+
+You will find automations in here for Native Kubernetes, OpenShift, Rancher, OpenStack  
   
-note: Tungston Fabric is the OpenSource version of Contrail which required a license and login password to download  
-  
-You will find automationsin here for Native Kubernetes, OpenShift, Rancher, OpenStack  
-  
-  
+note: Tungston Fabric is the OpenSource version of Contrail. Contrail requires a license and login password parameters to be set, in order to download the licensed SW. 
+note: OpenShift automations require a Red Hat account in order to download the Software
+
 ----------  
 ----------
 Federation: Moving beyond one Kubernetes cluster with Contrail SDN
