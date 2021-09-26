@@ -15,7 +15,7 @@ Federation: Moving beyond one Kubernetes cluster with tungsten-fabric/Contrail S
 ----------
 ----------
 
-[Click to explore Kubernetes cluster federation using SDN ](wikis/Federation:-Moving-beyond-one-Kubernetes-cluster-with-Contrail-SDN)
+[Click to explore Kubernetes cluster federation using SDN ](wikis/Federation:-Moving-beyond-one-Kubernetes-cluster-with-Contrail-SDN.md)
 
 <img src="images/federation-1.png" width="700">
 
@@ -26,7 +26,7 @@ tungsten-fabric/Contrail+Red Hat OpenShift
 ----------
 
 
-[Click to deploy a Red Hat OpenShift with tungsten-fabric/Contrail as the CNI. Worker nodes across multiple AWS VPC's and availability zones ](wikis/Contrail-as-the-CNI-for-Red-Hat-OpenShift)
+[Click to deploy a Red Hat OpenShift with tungsten-fabric/Contrail as the CNI. Worker nodes across multiple AWS VPC's and availability zones ](wikis/Contrail-as-the-CNI-for-Red-Hat-OpenShift.md)
 
 ![One-Click-Bare-Metal-Simulation-All-In-One](images/OpenShift-Contrail-Greenfield.png)
 
@@ -37,7 +37,7 @@ Stretching on premise tungsten-fabric/Contrail VRFs out to AWS using a vMX
 ----------
 
 
-[Click to stretch your on premise SDN network out to AWS native services](wikis/Stretching-on-premise-Datacenter's-running-contrail-SDN-out-to-AWS-native-EC2-instances-using-vMX's-as-SDN-gateways)
+[Click to stretch your on premise SDN network out to AWS native services](wikis/Stretching-on-premise-Datacenter's-running-contrail-SDN-out-to-AWS-native-EC2-instances-using-vMX's-as-SDN-gateways.md)
 
 High Level
 
