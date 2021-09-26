@@ -1,0 +1,499 @@
+## Last commit: 2020-05-10 23:21:36 UTC by jnpr
+version 20191212.201431_builder.r1074901;
+#junos-config
+groups {
+    global {
+        system {
+            host-name ip-100-72-100-204;
+            root-authentication {
+                encrypted-password "$6$EJlAdXxd$qg4pMaAu4Pf9xxxxxxxxxxxxxxxxxxxxxxxxxxxxzWoZdFiu2gPMeN6JEn3."; ## SECRET-DATA
+            }
+            login {
+                user jnpr {
+                    uid 2000;
+                    class super-user;
+                    authentication {
+                        encrypted-password "$6$EJlAdXxd$qg4pMaAu4xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxJEn3."; ## SECRET-DATA
+                        ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQAxxxxxxxxxxxxxxxxxxxxxxxxxxxxy6uiOWu4Y9CJp11itnkKl2JzsObhBrWP8mwgKs2iC10tl Contrailkey-uk"; ## SECRET-DATA
+                    }
+                }
+            }
+            services {
+                ssh {
+                    root-login deny-password;
+                    max-sessions-per-connection 32;
+                    client-alive-interval 120;
+                }
+                netconf {
+                    ssh;
+                    traceoptions {
+                        file netconf-ops.log size 3m files 20 world-readable;
+                        flag all;
+                    }
+                }
+            }
+            syslog {
+                user * {
+                    any emergency;
+                }
+                file messages {
+                    any notice;
+                    authorization info;
+                }
+                file interactive-commands {
+                    interactive-commands any;
+                }
+            }
+            ntp {
+                server 169.254.169.123;
+            }
+        }
+        chassis {
+            fpc 0 {
+                pic 0 {
+                    tunnel-services;
+                }
+                lite-mode;
+            }
+            network-services enhanced-ip;
+        }
+        interfaces {
+            fxp0 {
+                unit 0 {
+                    family inet {
+                        address 100.72.100.204/26;
+                    }
+                }
+            }
+            lo0 {
+                unit 0;
+            }
+        }
+        routing-options {
+            static {
+                route 0.0.0.0/0 {
+                    next-hop 100.72.100.193;
+                    retain;
+                    no-readvertise;
+                }
+            }
+        }
+    }
+    __contrail_basic__ {
+        snmp {
+            community public {
+                authorization read-only;
+            }
+        }
+        policy-options {
+            policy-statement MAINTENANCE-MODE {
+                term term1 {
+                    from {
+                        family evpn;
+                        nlri-route-type [ 2 1 3 4 5 6 ];
+                    }
+                    then {
+                        community add COM-MAINTENANCE;
+                        accept;
+                    }
+                }
+                term term100 {
+                    then accept;
+                }
+            }
+            policy-statement REJECT-MAINTENANCE-MODE {
+                term term1 {
+                    from {
+                        family evpn;
+                        community COM-MAINTENANCE;
+                        nlri-route-type [ 2 1 3 4 5 6 ];
+                    }
+                    then reject;
+                }
+            }
+            policy-statement MAINTENANCE-MODE-underlay {
+                then {
+                    as-path-prepend "9999 9999 9999";
+                    accept;
+                }
+            }
+            community COM-MAINTENANCE members 9999:9999;
+        }
+        protocols {
+            l2-learning {
+                global-mac-table-aging-time 1800;
+            }
+        }
+    }
+    __contrail_overlay_bgp__ {
+        policy-options {
+            policy-statement _contrail_ibgp_export_policy {
+                term inet-vpn {
+                    from family inet-vpn;
+                    then {
+                        next-hop self;
+                    }
+                }
+                term inet6-vpn {
+                    from family inet6-vpn;
+                    then {
+                        next-hop self;
+                    }
+                }
+            }
+        }
+        routing-options {
+            route-distinguisher-id 100.72.100.12;
+            dynamic-tunnels {
+                _contrail_gre_tunnel {
+                    source-address 100.72.100.12;
+                    gre;
+                    destination-networks {
+                        172.30.0.0/16;
+                    }
+                }
+            }
+            resolution {
+                rib bgp.rtarget.0 {
+                    resolution-ribs inet.0;
+                }
+            }
+            router-id 100.72.100.12;
+            autonomous-system 64512 loops 2;
+        }
+        protocols {
+            bgp {
+                group _contrail_asn-64512 {
+                    type internal;
+                    local-address 100.72.100.12;
+                    hold-time 90;
+                    family inet-vpn {
+                        unicast;
+                    }
+                    family inet6-vpn {
+                        unicast;
+                    }
+                    family evpn {
+                        signaling;
+                    }
+                    family route-target;
+                    export _contrail_ibgp_export_policy;
+                    cluster 100.72.100.12;
+                    local-as 64512 loops 2;
+                    multipath;
+                    neighbor 100.72.100.11;
+                    neighbor 100.72.100.13;
+                    neighbor 100.72.100.14;
+                    neighbor 100.72.100.15;
+                    neighbor 172.30.188.13 {
+                        peer-as 64512;
+                    }
+                    neighbor 172.30.188.14 {
+                        peer-as 64512;
+                    }
+                    neighbor 172.30.188.15 {
+                        peer-as 64512;
+                    }
+                    vpn-apply-export;
+                }
+            }
+        }
+    }
+    __contrail_overlay_evpn__ {
+        policy-options {
+            policy-statement EVPN-LB {
+                term term1 {
+                    from protocol evpn;
+                    then {
+                        load-balance per-packet;
+                    }
+                }
+            }
+            policy-statement _contrail_net1-l3-6-import {
+                term t1 {
+                    from community [ target_64512_1001 target_64512_8000006 ];
+                    then accept;
+                }
+            }
+            policy-statement _contrail_net1-l3-6-export {
+                term t1 {
+                    then {
+                        community add target_64512_1001;
+                        accept;
+                    }
+                }
+            }
+            policy-statement import-evpn {
+                term esi-in {
+                    from community community-esi-in;
+                    then accept;
+                }
+                term default-term {
+                    then reject;
+                }
+            }
+            community target_64512_1001 members target:64512:1001;
+            community target_64512_8000006 members target:64512:8000006;
+            community community-esi-in members target:64512:7999999;
+        }
+        routing-instances {
+            _contrail-l2 {
+                instance-type virtual-switch;
+                bridge-domains {
+                    bd-6 {
+                        vlan-id none;
+                        routing-interface irb.6;
+                    }
+                }
+                route-distinguisher 100.72.100.12:7999;
+                vrf-import [ import-evpn _contrail_net1-l2-6-import ];
+                vrf-target target:64512:7999999;
+            }
+        }
+        routing-options {
+            forwarding-table {
+                export EVPN-LB;
+            }
+        }
+    }
+    __contrail_overlay_evpn_gateway__ {
+        interfaces {
+            irb {
+                gratuitous-arp-reply;
+                unit 6 {
+                    proxy-macip-advertisement;
+                    virtual-gateway-accept-data;
+                    family inet {
+                        address 10.32.0.5/12 {
+                            preferred;
+                            virtual-gateway-address 10.47.255.254;
+                        }
+                    }
+                    virtual-gateway-v4-mac 00:00:5e:01:00:01;
+                }
+            }
+        }
+    }
+    __contrail_overlay_evpn_type5__ {
+        policy-options {
+            policy-statement type5_policy {
+                term 1 {
+                    from protocol direct;
+                    then accept;
+                }
+                term 2 {
+                    from protocol static;
+                    then accept;
+                }
+                term 3 {
+                    from {
+                        protocol evpn;
+                        route-filter 0.0.0.0/0 prefix-length-range /32-/32;
+                    }
+                    then accept;
+                }
+            }
+        }
+        routing-options {
+            forwarding-table {
+                chained-composite-next-hop {
+                    ingress {
+                        evpn;
+                    }
+                }
+            }
+        }
+    }
+    __contrail_overlay_fip_snat__ {
+        interfaces {
+            irb {
+                gratuitous-arp-reply;
+            }
+        }
+        firewall {
+            family inet {
+                filter _contrail_redirect-to-public-vrfs-inet4 {
+                    term term-_contrail_net1-l3-6 {
+                        from {
+                            destination-address {
+                                10.32.0.0/12;
+                            }
+                        }
+                        then {
+                            routing-instance _contrail_net1-l3-6;
+                        }
+                    }
+                    term default-term {
+                        then accept;
+                    }
+                }
+            }
+        }
+    }
+    __contrail_overlay_networking__ {
+        forwarding-options {
+            family inet {
+                filter {
+                    input redirect_to_public_vrf_filter;
+                }
+            }
+        }
+        policy-options {
+            policy-statement _contrail_net1-l3-6-import {
+                then reject;
+            }
+        }
+        firewall {
+            family inet {
+                filter redirect_to_public_vrf_filter {
+                    term term-6 {
+                        from {
+                            destination-address {
+                                10.32.0.0/12;
+                            }
+                        }
+                        then {
+                            routing-instance _contrail_net1-l3-6;
+                        }
+                    }
+                    term default-term {
+                        then accept;
+                    }
+                }
+            }
+        }
+        routing-instances {
+            _contrail_net1-l3-6 {
+                routing-options {
+                    static {
+                        route 0.0.0.0/0 next-table inet.0;
+                        route 10.32.0.0/12 discard;
+                    }
+                    auto-export {
+                        family inet {
+                            unicast;
+                        }
+                    }
+                }
+                instance-type vrf;
+                interface irb.6;
+                route-distinguisher 100.72.100.12:30006;
+                vrf-import [ REJECT-MAINTENANCE-MODE _contrail_net1-l3-6-import ];
+                vrf-export _contrail_net1-l3-6-export;
+                vrf-target target:64512:30006;
+                vrf-table-label;
+            }
+        }
+        routing-options {
+            static {
+                route 10.32.0.0/12 discard;
+            }
+        }
+    }
+    __interfaces__ {
+        interfaces {
+            ge-0/0/0 {
+                unit 0 {
+                    family inet {
+                        address 100.72.100.12/26;
+                    }
+                    family mpls;
+                }
+            }
+            ge-0/0/1 {
+                unit 0 {
+                    family inet {
+                        address 100.72.101.4/26;
+                    }
+                    family mpls;
+                }
+            }
+            ge-0/0/2 {
+                unit 0 {
+                    family inet {
+                        address 100.72.101.68/26;
+                    }
+                    family mpls;
+                }
+            }
+            lo0 {
+                unit 0 {
+                    family inet {
+                        address 127.0.0.1/32;
+                    }
+                }
+            }
+        }
+    }
+    __contrail_policy__ {
+        policy-options {
+            policy-statement _contrail_net1-l2-6-import {
+                term t1 {
+                    from community [ target_64512_1001 target_64512_1002 target_64512_1003 ];
+                    then accept;
+                }
+                then reject;
+            }
+            policy-statement _contrail_net1-l2-6-export {
+                term t1 {
+                    then {
+                        community add target_64512_1002;
+                        accept;
+                    }
+                }
+            }
+            policy-statement _contrail_net2-l2-7-import {
+                term t1 {
+                    from community [ target_64512_1001 target_64512_1002 target_64512_1003 ];
+                    then accept;
+                }
+                then reject;
+            }
+            policy-statement _contrail_net2-l2-7-export {
+                term t1 {
+                    then {
+                        community add target_64512_1002;
+                        accept;
+                    }
+                }
+            }
+            community target_64512_1002 members target:64512:1002;
+            community target_64512_1001 members target:64512:1001;
+            community target_64512_8000001 members target:64512:8000001;
+            community target_64512_1003 members target:64512:1003;
+        }
+    }
+    __ribgroup1__ {
+        policy-options {
+            prefix-list overlay {
+                10.32.0.0/12;
+            }
+            policy-statement leak-inet-to-vrf {
+                term 1 {
+                    from {
+                        protocol static;
+                        prefix-list overlay;
+                    }
+                    then accept;
+                }
+                term 2 {
+                    then reject;
+                }
+            }
+        }
+        routing-options {
+            static {
+                route 172.30.0.0/16 next-hop 100.72.100.1;
+                route 100.72.101.0/26 next-hop 100.72.101.1;
+                rib-group inet-to-vrf;
+            }
+            rib-groups {
+                inet-to-vrf {
+                    import-rib [ inet.0 _contrail_net1-l3-6.inet.0 ];
+                    import-policy leak-inet-to-vrf;
+                }
+            }
+        }
+    }
+}
+apply-groups [ global __contrail_basic__ __contrail_overlay_bgp__ __contrail_overlay_evpn__ __contrail_overlay_evpn_gateway__ __contrail_overlay_evpn_type5__ __contrail_overlay_fip_snat__ __contrail_overlay_networking__ __interfaces__ __contrail_policy__ __ribgroup1__ ];
