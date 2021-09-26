@@ -47,7 +47,7 @@ High Level
 ---------
 ----------
 
-[Exposing a k8minion, load balanced and scalable app to internet without an SDN gateway (no MX,vMX)](wikis/Exposing-a-k8minion-load-balanced-and-scalable-app-to-internet-without-an-MX-gateway)
+[Exposing a k8minion, load balanced and scalable app to internet without an SDN gateway (no MX,vMX)](wikis/Exposing-a-k8minion-load-balanced-and-scalable-app-to-internet-without-an-MX-gateway.md)
 
 ![One-Click-Bare-Metal-Simulation-Multi-VPC-MCGW](images/BYOT-exposing-public-ip-on-aws.png)
 
