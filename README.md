@@ -9,8 +9,9 @@ Lots and Lots of AWS CloudFormation stack examples in here.
 note: Tungston Fabric is the OpenSource version of Contrail. Contrail requires a license and login password parameters to be set, in order to download the licensed SW.   
 note: OpenShift automations require a Red Hat account in order to download the Software  
   
-The stacks are all in directory /deployers  
-The git root and cli* contains exmaple bash scripts for running up the stacks.   
+The stacks are all in directory /deployers
+    
+The git root and cli* contains example bash scripts for running up the stacks.   
   
 
 ----------  
