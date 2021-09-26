@@ -1,9 +1,0 @@
-deplyer is here deployers/Contrail-One-Click-Deployer-Prototype1.json 
-
-its adds an ec2 and tells contrail comand to deploy appformix into it. 
-
-Ansible completes but infact the appformix instance gets docker and then nothing else. 
-
-I sorted out the mount so seems to me to be broken in contrail command. I see a few emails with other folks saying the same. 
-
-Perhaps try again in the next release. 
