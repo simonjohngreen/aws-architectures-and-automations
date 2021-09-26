@@ -1,0 +1,773 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy and build Contrail Command plus networks routers subnets securty groups and bare metals ready to deploy with the UI",
+    "Parameters": {
+        "AvailabilityZone" : {
+          "Description" : "AWS Availability Zone",
+          "Type" : "String",
+          "Default": "eu-central-1a"
+        },
+        "ContrailAMI": {
+            "Description": "ContrailCommand AMI CentOS 7",
+            "Type": "String",
+            "Default": "ami-04cf43aca3e6f3de3"
+        },
+        "ControllerInstanceType": {
+            "Description": "Contrail Command Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "OneClickKey1"
+        },
+        "ContainerRegistryTag": {
+            "Description": "Container Registry Tag",
+            "Type": "String",
+            "Default": "2008.121"
+        },
+        "ContainerRegistryUserName": {
+            "Description": "Container Registry User Name",
+            "Type": "String"
+        },
+        "ContainerRegistryPassword": {
+            "Description": "Container Registry User Password",
+            "Type": "String",
+            "NoEcho": true
+        },
+        "VPCCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire VPC.",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "PublicSubnetCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet",
+            "Default": "100.72.100.0/25",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet",
+            "Default": "100.72.100.128/25",
+            "Type": "String"
+        },
+        "ContrailCommandPublicIP" : {
+          "Description" : "OpenVPN public static IP",
+          "Type" : "String",
+          "Default": "100.72.100.10"
+        },
+        "ContrailCommandPrivateIP" : {
+          "Description" : "OpenVPN private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.138"
+        },
+        "ContrailControllerPrivateIP" : {
+          "Description" : "OpenVPN private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.139"
+        },
+        "UserLocation" : {
+          "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "Default": "0.0.0.0/0",
+          "ConstraintDescription": "Put your IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be spopulated and the internet will be able access your deployments UI and SSH"
+        },
+        "SiteName" : {
+          "Description" : "Site Name",
+          "Type" : "String",
+          "Default": "ContrailBareMetalControl"
+        },
+        "VPCDOMAIN" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "default"
+   	},
+        "SSHPassword" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "EfrtGF5EDF_d54ERrf"
+        },
+        "ContrailPassword" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "contrail123"
+        }
+    },
+    "Resources": {
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR"
+                },
+                "InstanceTenancy": { "Ref" : "VPCDOMAIN" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClick", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicSubnet": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClickPublicSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClickPrivateSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClickInternetGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClickNATGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneCliclPrivateRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable"
+                }
+            }
+        },
+
+        "RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClickPubicSubnetRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "Route": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "SubnetRouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet"
+                },
+                "RouteTableId": {
+                    "Ref": "RouteTable"
+                }
+            }
+        },
+        "IPAddress": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SecurityGroupContrailCommand": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "Security group for Contrail Comand public and on internet",
+                "GroupName" : { "Fn::Join" : [ ".", [ "OneCLick Contrail Command public SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9090,
+                        "ToPort": 9090,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the Contrail Comand UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9091,
+                        "ToPort": 9091,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the Contrail Comand API"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8143,
+                        "ToPort": 8143,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1139,
+                        "ToPort": 1139,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow Contrail and K8S Controller Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access"
+                    },
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClick Contrail Command Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SecurityGroupContrail": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "Security group for Contrail Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "OneCLick Contrail Private SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "OneClick Contrail Instance Private Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+
+        "SGIngressSecurityGroupContrail": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrail"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrail"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupContrailCommand": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrailCommand"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrailCommand"
+            },
+            "Description": "loopback rule"
+          }
+        },
+
+        "ContrailCommandInstance": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "IPAddress", "PrivateSubnet", "Eth0Command", "Eth1Command" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "30"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "ContrailAMI"
+              },
+              "InstanceType": {
+                  "Ref": "ControllerInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0Command" },
+                "DeviceIndex" : "0"
+                },
+                {
+                  "NetworkInterfaceId" : {"Ref" : "Eth1Command" },
+                  "DeviceIndex" : "1"
+                  }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "OneClick Contrail Command Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "yum install -y iptables-services\n",
+                          "systemctl start iptables\n",
+                          "systemctl enable iptables\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandPublicIP"}, " --dport 1139 -j DNAT --to-destination ", {"Ref": "ContrailControllerPrivateIP"}, ":22\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerPrivateIP"}, " --dport 22 -j SNAT --to-source ", {"Ref": "ContrailCommandPrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerPrivateIP"}, " --dport 22 -j ACCEPT\n",
+                          "iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandPublicIP"}, " --dport 8143 -j DNAT --to-destination ", {"Ref": "ContrailControllerPrivateIP"}, ":8143\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerPrivateIP"}, " --dport 8143 -j SNAT --to-source ", {"Ref": "ContrailCommandPrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerPrivateIP"}, " --dport 8143 -j ACCEPT\n",
+                          "iptables -I INPUT -p tcp -m tcp --dport 9091 -j ACCEPT\n",
+                          "service iptables save\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y docker-ce-18.03.1.ce\n", 
+                          "systemctl start docker\n", 
+                          "systemctl status docker\n", 
+                          "systemctl enable docker\n",
+                          "docker login hub.juniper.net --username ", {"Ref": "ContainerRegistryUserName"}, " --password ", {"Ref": "ContainerRegistryPassword"}, "\n",
+                          "docker pull hub.juniper.net/contrail/contrail-command-deployer:5.1.0-0.38\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "echo \"GATEWAYDEV=ens3\" >> /etc/sysconfig/network\n",
+                          "echo \"network:\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"BOOTPROTO=dhcp\" | tee /etc/sysconfig/network-scripts/ifcfg-ens4\n", 
+                          "echo \"DEVICE=ens4\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n", 
+                          "echo \"ONBOOT=yes\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n", 
+                          "echo \"TYPE=Ethernet\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n", 
+                          "echo \"USERCTL=no\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n", 
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "systemctl restart network.service\n",
+                          "echo \"command_servers:\" | tee /tmp/command_servers.yml\n",
+                          "echo \"    server1:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ip: ",
+                          {"Ref": "ContrailCommandPrivateIP"},
+                          "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        connection: ssh\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ssh_user: root\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ssh_pass: ", {"Ref": "SSHPassword"},  "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        sudo_pass: ", {"Ref": "SSHPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ntpserver: 17.253.34.253\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        registry_insecure: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry: hub.juniper.net/contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_tag: ",
+                             {"Ref": "ContainerRegistryTag"},
+                             "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry_username: ",
+                             {"Ref": "ContainerRegistryUserName"},
+                             "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry_password: ",
+                             {"Ref": "ContainerRegistryPassword"},
+                             "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        config_dir: /etc/contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        contrail_config:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            database:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              type: postgres\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              dialect: postgres\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              host: localhost\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              user: root\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              name: contrail_test\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              max_open_conn: 100\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              connection_retries: 10\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              retry_period: 3s\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            cache:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                timeout: 10s\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                max_history: 100000\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                rdbms:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            server:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                read_timeout: 10\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                write_timeout: 5\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                log_api: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                address: :9091\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                tls:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  key_file: /usr/share/contrail/ssl/cs-key.pem\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  cert_file: /usr/share/contrail/ssl/cs-cert.pem\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enable_grpc: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                static_files:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  /: /usr/share/contrail/public\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                notify_etcd: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enable_vnc_replication: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            keystone:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                local: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                assignment:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  type: static\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  data:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     domains:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        default: &default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     projects:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        admin: &admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        demo: &demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     users:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        admin:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          email: sgreen@juniper.net\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          roles:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          - id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                            name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                            project: *admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                store:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  type: memory\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  expire: 36000\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  authurl: https://localhost:9091/keystone/v3\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            auth_type: basic-auth\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            etcd:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                endpoints:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                 - localhost:2379\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                username: \" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                password: \" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                path: contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            watcher:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                storage: json\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            client:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              project_name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              domain_id: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              schema_root: /\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              endpoint: https://localhost:9091\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            agent:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              backend: file\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                          "docker run -td --net host -v /tmp/command_servers.yml:/command_servers.yml --privileged --name contrail_command_deployer hub.juniper.net/contrail/contrail-command-deployer:", {"Ref": "ContainerRegistryTag"}, "\n",
+                          "service iptables save\n",
+                          "echo \"all done, ansible will take a few minutes to complete, then connect to the Contrail Command UI on https://",
+                          {"Ref": "IPAddress"},
+                          ":9091\"\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0Command" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailCommand" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailCommandPublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PublicSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "Eth1Command" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth1",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailCommand" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailCommandPrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 1"}, {"Key" : "Interface", "Value" : "eth1"} ]
+            }
+        },
+        "ContrailControllerInstance": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet", "Eth0Controller" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "ContrailAMI"
+              },
+              "InstanceType": {
+                  "Ref": "ControllerInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0Controller" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "OneClick Contrail Controller and K8S Master Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum install -y ntp\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "systemctl restart network.service\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0Controller" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrail" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailControllerPrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "IPAssociaton": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "DependsOn": "ContrailCommandInstance",
+            "Properties": {
+                "NetworkInterfaceId" : { "Ref" : "Eth0Command" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "IPAddress",
+                        "AllocationId"
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs" : {
+           "ContrailCommandPublicIP": {
+                   "Description": "Contrail Command Public IP",
+                   "Value": {
+                               "Ref": "IPAddress"
+                       }
+           },
+           "ContrailBareMetalControllerPrivateIP": {
+                   "Description": "Contrail Controller Private IP",
+                   "Value": {
+                               "Ref": "ContrailControllerPrivateIP"
+                       }
+           },
+           "ContrailCommandWebUI": {
+                   "Description": "Contrail Command Web UI",
+                   "Value":  { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress"}, ":9091" ] ] }
+                   
+           },
+           "ContrailUI": {
+                   "Description": "Contrail Web UI",
+                   "Value": { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress"}, ":8143" ] ] }
+           },
+           "SSHtoContrailCommand": {
+                   "Description": "SSH to contrail command",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your OneClickKey1 private key file] centos@", {"Ref": "IPAddress"}, "" ] ] }
+           },
+           "SSHtoContrailController": {
+                   "Description": "SSH to combined contrail controller and k8master and k8minion",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your OneClickKey1 private key file] centos@", {"Ref": "IPAddress"}, " -p 1139" ] ] }
+           }
+    }
+}
+

@@ -1,0 +1,1595 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploys Contrail Command and one or three empty OpenStack instances in one or three AZs",
+    "Parameters": {
+        "AvailabilityZone1" : {
+          "Description" : "AWS Availability Zone One",
+          "Type" : "String",
+          "Default": "eu-west-1a"
+        },
+        "AvailabilityZone2" : {
+          "Description" : "AWS Availability Zone Two",
+          "Type" : "String",
+          "Default": "eu-west-1b"
+        },
+        "AvailabilityZone3" : {
+          "Description" : "AWS Availability Zone Three",
+          "Type" : "String",
+          "Default": "eu-west-1c"
+        },
+        "CommandInstanceType": {
+            "Description": "Contrail Command Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "ControllerInstanceType": {
+            "Description": "Contrail Controller Instance Type, needs to support nesting",
+            "Type": "String",
+            "Default": "m5.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "ContrailKey"
+        },
+        "ContainerRegistryTag": {
+            "Description": "Container Registry User Name",
+            "Type": "String",
+            "Default": "2003.33"
+        },
+        "ContainerRegistryUserName": {
+            "Description": "Container Registry User Name",
+            "Type": "String"
+        },
+        "ContainerRegistryPassword": {
+            "Description": "Container Registry User Password",
+            "Type": "String",
+            "NoEcho": true
+        },
+        "VPCCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire management control VPC.",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "PublicSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet",
+            "Default": "100.72.100.192/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ1",
+            "Default": "100.72.100.0/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1GatewayIP": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "ConstraintDescription": "parameter must be in the form x.x.x.x",
+            "Description": "Gateway IP used by contrail command to nat to the controllers in AZ2 AZ3",
+            "Default": "100.72.100.1",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ2",
+            "Default": "100.72.100.64/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR3": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ3",
+            "Default": "100.72.100.128/26",
+            "Type": "String"
+        },
+        "DeployContrailCommand" : {
+          "Description" : "if true we will deploy contrail command",
+          "Type" : "String",
+          "Default": "true"
+        },
+        "DeployHighlyAvailable" : {
+          "Description" : "if true we will deploy the contrail controller as an HA cluster of three nodes in three AZs if false we will deploy one controller",
+          "Type" : "String",
+          "Default": "false"
+        },
+        "ContrailCommandAZ1PublicIP" : {
+          "Description" : "AZ1 Command public static IP",
+          "Type" : "String",
+          "Default": "100.72.100.203"
+        },
+        "ContrailCommandAZ1PrivateIP" : {
+          "Description" : "AZ1 Command private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.10"
+        },
+        "ContrailControllerAZ1PrivateIP" : {
+          "Description" : "AZ1 Contrail Controller private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.11"
+        },
+        "ContrailControllerAZ2PrivateIP" : {
+          "Description" : "AZ2 Contrail Controller  private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.74"
+        },
+        "ContrailControllerAZ3PrivateIP" : {
+          "Description" : "AZ3 Contrail Controller private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.138"
+        },
+        "UserLocation" : {
+          "Description" : "The IP address range that can be used for OAM access to CC and if running HA the load balancer, both on internet. Typically your laptop /32. If left blank we will add 0.0.0./0 and allow ssh from anywhere",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "Default": "0.0.0.0/0",
+          "ConstraintDescription": "Put your Client IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "SGSubnet1" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String",
+          "Default": "100.73.100.0/23"
+        },
+        "SGSubnet2" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SGSubnet3" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SGSubnet4" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SiteName" : {
+          "Description" : "Site Name",
+          "Type" : "String",
+          "Default": "SDNController"
+        },
+        "VPCDOMAIN" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "default"
+   	},
+        "SSHPassword" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "EfrtGF5EDF_d54ERrf",
+          "NoEcho": true
+   	},
+        "ContrailPassword" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "contrail123"
+   	}
+    },
+    "Conditions": {
+        "HasDeployContrailCommand": { "Fn::Equals": [{ "Ref": "DeployContrailCommand" }, "true"] },
+        "HasDeployHighlyAvailable": { "Fn::Equals": [{ "Ref": "DeployHighlyAvailable" }, "true"] },
+        "HasSGSubnet1": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet1" }, ""] } ] },
+        "HasSGSubnet2": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet2" }, ""] } ] },
+        "HasSGSubnet3": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet3" }, ""] } ] },
+        "HasSGSubnet4": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet4" }, ""] } ] },
+        "HasSGSubnet1andHA": {"Fn::And": [{"Condition": "HasSGSubnet1"}, {"Condition": "HasDeployHighlyAvailable" }]},
+        "HasSGSubnet2andHA": {"Fn::And": [{"Condition": "HasSGSubnet2"}, {"Condition": "HasDeployHighlyAvailable" }]},
+        "HasSGSubnet3andHA": {"Fn::And": [{"Condition": "HasSGSubnet3"}, {"Condition": "HasDeployHighlyAvailable" }]},
+        "HasSGSubnet4andHA": {"Fn::And": [{"Condition": "HasSGSubnet4"}, {"Condition": "HasDeployHighlyAvailable" }]}
+    },
+    "Mappings": {
+        "AWSRegionArch2AMI": {
+            "eu-central-1": { "CENTOS76HVM": "ami-0e8286b71b81c3cc1" },
+            "ap-southeast-2": { "CENTOS76HVM": "ami-0b2045146eb00b617" },
+            "eu-west-1": { "CENTOS76HVM": "ami-0b850cf02cc00fdc8" },
+            "us-east-1": { "CENTOS76HVM": "ami-0affd4508a5d2481b" },
+            "us-east-2": { "CENTOS76HVM": "ami-01e36b7901e884a10" },
+            "us-west-2": { "CENTOS76HVM": "ami-09e5afc68eed60ef4" },
+            "ap-northeast-1": { "CENTOS76HVM": "ami-06a46da680048c8ae" },
+            "eu-west-2": { "CENTOS76HVM": "ami-09e5afc68eed60ef4" },
+            "eu-west-3": { "CENTOS76HVM": "ami-0cb72d2e599cffbf9" },
+            "ap-southeast-1": { "CENTOS76HVM": "ami-07f65177cb990d65b" },
+            "eu-north-1": { "CENTOS76HVM": "ami-05788af9005ef9a93" },
+            "ap-south-1": { "CENTOS76HVM": "ami-026f33d38b6410e30" },
+            "ap-northeast-2": { "CENTOS76HVM": "ami-06e83aceba2cb0907" },
+            "sa-east-1": { "CENTOS76HVM": "ami-0b30f38d939dd4b54" }
+        }
+    },
+    "Resources": {
+        "VPC1": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR1"
+                },
+                "InstanceTenancy": { "Ref" : "VPCDOMAIN" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail", { "Ref" : "SiteName" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPublicSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPrivateSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR2"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPrivateSN2", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet3": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone3" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR3"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPrivateSN3", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailInternetGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailNATGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ControllerPrivateRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable2": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ControllerPrivateRouteTable2", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute2": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable3": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ControllerPrivateRouteTable3", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute3": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation3": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet3"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                }
+            }
+        },
+        "PublicRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPubicSubnetRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicRoute1": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                }
+            }
+        },
+        "IPAddress1": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SecurityGroupContrailCommand": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployContrailCommand",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "Security group for Contrail Comand, public and on internet",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Contrail_Command_public_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9090,
+                        "ToPort": 9090,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the Contrail Comand UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9091,
+                        "ToPort": 9091,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the Contrail Comand API"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8143,
+                        "ToPort": 8143,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the AZ1 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8144,
+                        "ToPort": 8144,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the AZ2 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8145,
+                        "ToPort": 8145,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow access to the AZ3 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8146,
+                        "ToPort": 8146,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow http access to the OpenStack UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 6080,
+                        "ToPort": 6080,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow http access to the OpenStack VNC Console"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1139,
+                        "ToPort": 1139,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow Contrail Controller AZ1 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1140,
+                        "ToPort": 1140,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow Contrail Controller AZ1 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1141,
+                        "ToPort": 1141,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow Contrail Controller AZ1 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2138,
+                        "ToPort": 2138,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3138,
+                        "ToPort": 3138,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2140,
+                        "ToPort": 2140,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3140,
+                        "ToPort": 3140,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail_Command_Security_Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SecurityGroupContrailAZ1": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ1 Security group for Contrail Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Contrail_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail_Instance_Private_Security_Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+                }
+        },
+        "SecurityGroupContrailAZ2": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ2 Security group for Contrail Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Contrail_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail Instance Private Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1andHA", 
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+                }
+        },
+        "SecurityGroupContrailAZ3": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ3 Security group for Contrail Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Contrail_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail Instance Private Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4andHA",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupContrailAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+                }
+        },
+        "SGIngressSecurityGroupContrailAZ1": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrailAZ1"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrailAZ1"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupContrailAZ2": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrailAZ2"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrailAZ2"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupContrailAZ3": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrailAZ3"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrailAZ3"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupContrailCommand": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Condition": "HasDeployContrailCommand",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupContrailCommand"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupContrailCommand"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "ContrailCommandInstance": {
+          "Type": "AWS::EC2::Instance",
+          "Condition": "HasDeployContrailCommand",
+          "DependsOn": [ "IPAddress1", "PrivateSubnet1", "Eth0Command", "Eth1Command" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "100"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "CENTOS76HVM"]
+              },
+              "InstanceType": {
+                  "Ref": "CommandInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0Command" },
+                "DeviceIndex" : "0"
+                },
+                {
+                  "NetworkInterfaceId" : {"Ref" : "Eth1Command" },
+                  "DeviceIndex" : "1"
+                  }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Contrail_Command_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "echo 'centos:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "yum install -y iptables-services\n",
+                          "systemctl start iptables\n",
+                          "systemctl enable iptables\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 1139 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ1PrivateIP"}, ":22\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 22 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 22 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 1140 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ2PrivateIP"}, ":22\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ2PrivateIP"}, " --dport 22 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ2PrivateIP"}, " --dport 22 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 1141 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ3PrivateIP"}, ":22\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ3PrivateIP"}, " --dport 22 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ3PrivateIP"}, " --dport 22 -j ACCEPT\n",
+                          "iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 8143 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ1PrivateIP"}, ":8143\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 8143 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 8143 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 8144 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ2PrivateIP"}, ":8143\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ2PrivateIP"}, " --dport 8143 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ2PrivateIP"}, " --dport 8143 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 8145 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ3PrivateIP"}, ":8143\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ3PrivateIP"}, " --dport 8143 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ3PrivateIP"}, " --dport 8143 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 8146 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ1PrivateIP"}, ":80\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 80 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 80 -j ACCEPT\n",
+                          "iptables -t nat -I PREROUTING -p tcp -d ", {"Ref": "ContrailCommandAZ1PublicIP"}, " --dport 6080 -j DNAT --to-destination ", {"Ref": "ContrailControllerAZ1PrivateIP"}, ":6080\n",
+                          "iptables -t nat -I POSTROUTING -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 6080 -j SNAT --to-source ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\n",
+                          "iptables -I FORWARD -p tcp -d ", {"Ref": "ContrailControllerAZ1PrivateIP"}, " --dport 6080 -j ACCEPT\n",
+                          "iptables -I INPUT -p tcp -m tcp --dport 9091 -j ACCEPT\n",
+                          "service iptables save\n",
+                          "yum remove -y chrony\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2 ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n",
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n",
+                          "systemctl start ntpd\n",
+                          "systemctl enable ntpd\n",
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "docker login hub.juniper.net --username ", {"Ref": "ContainerRegistryUserName"}, " --password ", {"Ref": "ContainerRegistryPassword"}, "\n",
+                          "docker pull hub.juniper.net/contrail/contrail-command-deployer:", {"Ref": "ContainerRegistryTag"}, "\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "echo \"GATEWAYDEV=ens3\" >> /etc/sysconfig/network\n",
+                          "echo \"network:\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"BOOTPROTO=dhcp\" | tee /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"DEVICE=ens4\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"ONBOOT=yes\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"TYPE=Ethernet\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"USERCTL=no\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "echo \"", {"Ref": "PrivateSubnetCIDR2"}, " via ", {"Ref": "PrivateSubnetCIDR1GatewayIP"}, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-ens4\n",
+                          "echo \"", {"Ref": "PrivateSubnetCIDR3"}, " via ", {"Ref": "PrivateSubnetCIDR1GatewayIP"}, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-ens4\n",
+                          "echo \"", {"Ref": "SGSubnet1"}, " via ", {"Ref": "PrivateSubnetCIDR1GatewayIP"}, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-ens4\n",
+                          "systemctl restart network.service\n",
+                          "echo \"command_servers:\" | tee /tmp/command_servers.yml\n",
+                          "echo \"    server1:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ip: ", {"Ref": "ContrailCommandAZ1PrivateIP"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        connection: ssh\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ssh_user: root\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ssh_pass: ", {"Ref": "SSHPassword"},  "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        sudo_pass: ", {"Ref": "SSHPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        ntpserver: 169.254.169.123\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        registry_insecure: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry: hub.juniper.net/contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_tag: ", {"Ref": "ContainerRegistryTag"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry_username: ", {"Ref": "ContainerRegistryUserName"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        container_registry_password: ", {"Ref": "ContainerRegistryPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        config_dir: /etc/contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"        contrail_config:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            database:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              type: postgres\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              dialect: postgres\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              host: localhost\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              user: root\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              name: contrail_test\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              max_open_conn: 100\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              connection_retries: 10\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              retry_period: 3s\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            cache:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                timeout: 10s\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                max_history: 100000\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                rdbms:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            server:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                read_timeout: 10\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                write_timeout: 5\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                log_api: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                address: :9091\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                tls:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  key_file: /usr/share/contrail/ssl/cs-key.pem\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  cert_file: /usr/share/contrail/ssl/cs-cert.pem\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enable_grpc: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                static_files:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  /: /usr/share/contrail/public\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                notify_etcd: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enable_vnc_replication: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            keystone:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                local: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                assignment:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  type: static\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  data:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     domains:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        default: &default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     projects:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        admin: &admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        demo: &demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: demo\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                     users:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                        admin:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          email: sgreen@juniper.net\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          roles:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                          - id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                            name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                            project: *admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                store:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  type: memory\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  expire: 36000\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                  authurl: https://localhost:9091/keystone/v3\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            auth_type: basic-auth\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            etcd:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                endpoints:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                 - localhost:2379\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                username: \" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                password: \" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                path: contrail\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            watcher:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                enabled: false\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"                storage: json\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            client:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              id: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              password: ", {"Ref": "ContrailPassword"}, "\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              project_name: admin\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              domain_id: default\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              schema_root: /\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              endpoint: https://localhost:9091\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"            agent:\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              backend: file\" | tee --append /tmp/command_servers.yml\n",
+                          "echo \"              log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                          "docker run -td --net host -v /tmp/command_servers.yml:/command_servers.yml --privileged --name contrail_command_deployer hub.juniper.net/contrail/contrail-command-deployer:", {"Ref": "ContainerRegistryTag"}, "\n",
+                          "service iptables save\n",
+                          "echo \"all done, ansible will take a few minutes to complete, then connect to the Contrail Command UI on https://",
+                          {"Ref": "IPAddress1"},
+                          ":9091\"\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0Command" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployContrailCommand",
+          "Properties" : {
+            "Description"     : "eth0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailCommand" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailCommandAZ1PublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PublicSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "Eth1Command" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployContrailCommand",
+          "Properties" : {
+            "Description"     : "eth1",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailCommand" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailCommandAZ1PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 1"}, {"Key" : "Interface", "Value" : "eth1"} ]
+            }
+        },
+        "ContrailControllerInstanceAZ1": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet1", "Eth0ControllerAZ1" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "CENTOS76HVM"]
+              },
+              "InstanceType": {
+                  "Ref": "ControllerInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ1" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Contrail_Controller_and_OpenStack_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n",
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n",
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"upgrade to 7.7 as the latest ami on aws is 7.6 the vrouter will not load\"\n",
+                          "yum clean all\n",
+                          "yum -y update\n",
+                          "yum reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ1" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailAZ1" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailControllerAZ1PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "ContrailControllerInstanceAZ2": {
+          "Type": "AWS::EC2::Instance",
+          "Condition": "HasDeployHighlyAvailable",
+          "DependsOn": [ "PrivateSubnet2", "Eth0ControllerAZ2" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "CENTOS76HVM"]
+              },
+              "InstanceType": {
+                  "Ref": "ControllerInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ2" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Contrail_Controller_and_OpenStack_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n", 
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"upgrade to 7.7 as the latest ami on aws is 7.6 the vrouter will not load\"\n",
+                          "yum clean all\n",
+                          "yum -y update\n",
+                          "yum reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ2" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailAZ2" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailControllerAZ2PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet2" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "ContrailControllerInstanceAZ3": {
+          "Type": "AWS::EC2::Instance",
+          "Condition": "HasDeployHighlyAvailable",
+          "DependsOn": [ "PrivateSubnet3", "Eth0ControllerAZ3" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone3" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "CENTOS76HVM"]
+              },
+              "InstanceType": {
+                  "Ref": "ControllerInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ3" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Contrail_Controller_and_OpenStack_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n", 
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"upgrade to 7.7 as the latest ami on aws is 7.6 the vrouter will not load\"\n",
+                          "yum clean all\n",
+                          "yum -y update\n",
+                          "reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ3" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailAZ3" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailControllerAZ3PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet3" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "IPAssociaton1": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "Condition": "HasDeployContrailCommand",
+            "DependsOn": "ContrailCommandInstance",
+            "Properties": {
+                "NetworkInterfaceId" : { "Ref" : "Eth0Command" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "IPAddress1",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+        "ContrailLoadBalancer" : {
+          "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties" : {
+            "Subnets":[  
+              {  
+                "Ref":"PrivateSubnet1"
+              },
+              {  
+                "Ref":"PrivateSubnet2"
+              },
+              {  
+                "Ref":"PrivateSubnet3"
+              }
+            ],
+            "Scheme": "internal",
+            "Type" : "network",
+            "LoadBalancerAttributes" :
+              [ { "Key" : "load_balancing.cross_zone.enabled", "Value" : "true" } ],
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": { "Fn::Join" : [ ".", [ "Contrail_Load_Balancer_", { "Ref" : "SiteName" } ] ] }
+                }
+            ]
+          }
+        },
+        "ContrailNLBListener1" : {
+          "Type" : "AWS::ElasticLoadBalancingV2::Listener",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties" : {
+            "DefaultActions" : [{
+              "Type" : "forward",
+              "TargetGroupArn" : { "Ref" : "ContrailNLBTargetGroup1" }
+            }],
+          "LoadBalancerArn" : { "Ref" : "ContrailLoadBalancer" },
+          "Port" : "6443",
+          "Protocol" : "TCP"
+          }
+        },
+        "ContrailNLBTargetGroup1" : {
+          "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+          "Condition": "HasDeployHighlyAvailable",
+          "Properties" : {
+            "HealthCheckIntervalSeconds" : 30,
+            "HealthyThresholdCount" : 3,
+            "Port" : 6443,
+            "Protocol" : "TCP",
+            "UnhealthyThresholdCount" : 3,
+            "VpcId" : {"Ref" : "VPC1"},
+            "Targets" : 
+              [ { "Id" : { "Ref" : "ContrailControllerInstanceAZ1"}, "Port" : 6443 },
+                { "Id" : { "Ref" : "ContrailControllerInstanceAZ2"}, "Port" : 6443 },
+                { "Id" : { "Ref" : "ContrailControllerInstanceAZ3"}, "Port" : 6443 }
+            ],
+            "TargetGroupAttributes" :
+              [ { "Key" : "deregistration_delay.timeout_seconds", "Value" : "60" } ],
+            "Tags": [
+                {
+                    "Key": "Name",
+                    "Value": { "Fn::Join" : [ ".", [ "Contrail_Load_Balancer_Target_Group1_", { "Ref" : "SiteName" } ] ] }
+                }
+            ]
+          }
+        }
+    },
+    "Outputs" : {
+           "ContrailCommandWebUI": {
+                   "Description": "Contrail Command Web UI, please give it a few minutes to build",
+                   "Value":  { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":9091" ] ] }
+                   
+           },
+           "ContrailUIAZ1": {
+                   "Description": "AZ1 Contrail Web UI via Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":8143" ] ] }
+           },
+           "OpenStackUIAZ1": {
+                   "Description": "AZ1 OpenStack Web UI via Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "http://", {"Ref": "IPAddress1"}, ":8146" ] ] }
+           },
+           "ContrailUIAZ2": {
+                   "Description": "AZ2 Contrail Web UI via Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":8144" ] ] }
+           },
+           "ContrailUIAZ3": {
+                   "Description": "AZ3 Contrail Web UI via Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":8145" ] ] }
+           },
+           "ContrailCommandAZ1PublicIP": {
+                   "Description": "Contrail Command Public IP",
+                   "Value": {
+                               "Ref": "IPAddress1"
+                       }
+           },
+           "ContrailControllerAZ1PrivateIP": {
+                   "Description": "Contrail Controller and k8master AZ1 Private IP",
+                   "Value": {
+                               "Ref": "ContrailControllerAZ1PrivateIP"
+                       }
+           },
+           "ContrailControllerAZ2PrivateIP": {
+                   "Description": "Contrail Controller and k8master AZ2 Private IP",
+                   "Value": {
+                               "Ref": "ContrailControllerAZ2PrivateIP"
+                       }
+           },
+           "ContrailControllerAZ3PrivateIP": {
+                   "Description": "Contrail Controller and k8master AZ3 Private IP",
+                   "Value": {
+                               "Ref": "ContrailControllerAZ3PrivateIP"
+                       }
+           },
+           "SSHtoContrailCommand": {
+                   "Description": "SSH to contrail command",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] centos@", {"Ref": "IPAddress1"}, "" ] ] }
+           },
+           "SSHtoContrailControllerAZ1": {
+                   "Description": "SSH to the contrail controller in AZ1",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] centos@", {"Ref": "IPAddress1"}, " -p 1139" ] ] }
+           },
+           "SSHtoContrailControllerAZ2": {
+                   "Description": "SSH to the contrail controller in AZ2",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] centos@", {"Ref": "IPAddress1"}, " -p 1140" ] ] }
+           },
+           "SSHtoContrailControllerAZ3": {
+                   "Description": "SSH to the contrail controller in AZ3",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] centos@", {"Ref": "IPAddress1"}, " -p 1141" ] ] }
+           },
+           "HAOpenShiftAPILB": {
+                   "Description": "HA OpenShift API endpoint via the internal load balancer",
+                   "Value": { "Fn::Join": [ "", [ "https://", { "Fn::GetAtt" : [ "ContrailLoadBalancer", "DNSName" ]}, ":6443" ] ] },
+                   "Condition": "HasDeployHighlyAvailable"
+           }
+    }
+}

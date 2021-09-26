@@ -1,0 +1,1000 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploys three Kubernetes minions into three regions of a private VPC Contrail controllers as the CNI",
+    "Parameters": {
+        "AvailabilityZone1" : {
+          "Description" : "AWS Availability Zone One",
+          "Type" : "String",
+          "Default": "eu-central-1a"
+        },
+        "AvailabilityZone2" : {
+          "Description" : "AWS Availability Zone Two",
+          "Type" : "String",
+          "Default": "eu-central-1b"
+        },
+        "AvailabilityZone3" : {
+          "Description" : "AWS Availability Zone Three",
+          "Type" : "String",
+          "Default": "eu-central-1c"
+        },
+        "MinionAMI": {
+            "Description": "AMI CentOS 7 is the default",
+            "Type": "String",
+            "Default": "ami-04cf43aca3e6f3de3"
+        },
+        "ComputeInstanceType": {
+            "Description": "Contrail Controller Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "ContrailKey"
+        },
+        "VPCCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire management control VPC.",
+            "Default": "100.73.100.0/23",
+            "Type": "String"
+        },
+        "PublicSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet use dby the NAT GW",
+            "Default": "100.73.100.192/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ1",
+            "Default": "100.73.100.0/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ2",
+            "Default": "100.73.100.64/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR3": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ3",
+            "Default": "100.73.100.128/26",
+            "Type": "String"
+        },
+        "DeployThreeMinions" : {
+          "Description" : "if true we will deploy the contrail controller as an HA cluster of three nodes in three AZs if false we will deploy one controller",
+          "Type" : "String",
+          "Default": "true"
+        },
+        "ContrailMinionAZ1PrivateIP" : {
+          "Description" : "AZ1 Contrail Controller private static IP",
+          "Type" : "String",
+          "Default": "100.73.100.11"
+        },
+        "ContrailMinionAZ2PrivateIP" : {
+          "Description" : "AZ2 Contrail Controller  private static IP",
+          "Type" : "String",
+          "Default": "100.73.100.74"
+        },
+        "ContrailMinionAZ3PrivateIP" : {
+          "Description" : "AZ3 Contrail Controller private static IP",
+          "Type" : "String",
+          "Default": "100.73.100.138"
+        },
+        "SGSubnet1" : {
+          "Description" : "AN IP address range allowed in security to point towards the Minion cluster. Controller subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String",
+          "Default": "100.72.100.0/23"
+        },
+        "SGSubnet2" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SGSubnet3" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SGSubnet4" : {
+          "Description" : "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+          "Type": "String"
+        },
+        "SiteName" : {
+          "Description" : "Site Name",
+          "Type" : "String",
+          "Default": "SDNMinion"
+        },
+        "VPCDOMAIN" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "default"
+   	},
+        "SSHPassword" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "EfrtGF5EDF_d54ERrf"
+   	}
+    },
+    "Conditions": {
+        "HasDeployThreeMinions": { "Fn::Equals": [{ "Ref": "DeployThreeMinions" }, "true"] },
+        "HasSGSubnet1": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet1" }, ""] } ] },
+        "HasSGSubnet2": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet2" }, ""] } ] },
+        "HasSGSubnet3": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet3" }, ""] } ] },
+        "HasSGSubnet4": { "Fn::Not": [ { "Fn::Equals": [{ "Ref": "SGSubnet4" }, ""] } ] },
+        "HasSGSubnet1and3Minions": {"Fn::And": [{"Condition": "HasSGSubnet1"}, {"Condition": "HasDeployThreeMinions" }]},
+        "HasSGSubnet2and3Minions": {"Fn::And": [{"Condition": "HasSGSubnet2"}, {"Condition": "HasDeployThreeMinions" }]},
+        "HasSGSubnet3and3Minions": {"Fn::And": [{"Condition": "HasSGSubnet3"}, {"Condition": "HasDeployThreeMinions" }]},
+        "HasSGSubnet4and3Minions": {"Fn::And": [{"Condition": "HasSGSubnet4"}, {"Condition": "HasDeployThreeMinions" }]}
+    },
+    "Resources": {
+        "VPC1": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR1"
+                },
+                "InstanceTenancy": { "Ref" : "VPCDOMAIN" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Computes", { "Ref" : "SiteName" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "NATGWPublicSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR2"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateSN2", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet3": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone3" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR3"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateSN3", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsInternetGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsNATGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable2": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateRouteTable2", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute2": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable3": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionsPrivateRouteTable3", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PublicRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "MinionPubicSubnetRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicRoute1": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                }
+            }
+        },
+        "PrivateSubnetRoute3": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation3": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet3"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                }
+            }
+        },
+        "SecurityGroupMinionAZ1": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ1 Security group for Minion Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Minion_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Minion Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Minion_Instance_Private_Security_Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ1" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ1" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet4"
+                }
+        },
+        "SecurityGroupMinionAZ2": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ2 Security group for Minion Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Minion_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Minion Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Minion Instance Private Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1and3Minions", 
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ2" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ2" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet4"
+                }
+        },
+        "SecurityGroupMinionAZ3": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployThreeMinions",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ3 Security group for Minion Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ "Minion_Private_SG", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR1"},
+                        "Description": "allow access to the Minion Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Minion Instance Private Security Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet1and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet1"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet1"
+                }
+        },
+        "SgEntry02AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet2and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet2"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet2"
+                }
+        },
+        "SgEntry03AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet3and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet3"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet3"
+                }
+        },
+        "SgEntry04AZ3" : {
+                "Type": "AWS::EC2::SecurityGroupIngress",
+                "Condition": "HasSGSubnet4and3Minions",
+                "Properties": { 
+                        "GroupId": { "Ref": "SecurityGroupMinionAZ3" }, 
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "SGSubnet4"},
+                        "Description": "allow inbound traffic to the Minions from a specified subnet subnet4"
+                }
+        },
+        "SGIngressSecurityGroupMinionAZ1": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupMinionAZ1"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupMinionAZ1"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupMinionAZ2": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Condition": "HasDeployThreeMinions",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupMinionAZ2"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupMinionAZ2"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "SGIngressSecurityGroupMinionAZ3": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Condition": "HasDeployThreeMinions",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupMinionAZ3"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupMinionAZ3"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "ContrailMinionInstanceAZ1": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet1", "Eth0ControllerAZ1" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "100"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "MinionAMI"
+              },
+              "InstanceType": {
+                  "Ref": "ComputeInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ1" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Minion_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n",
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n",
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"the next two lines are a patch for release 1910 and 1911. cloud image kernel is 3.10.0-957 but we need 3.10.0-1062\" \n",
+                          "yum upgrade -y kernel\n",
+                          "reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ1" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupMinionAZ1" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailMinionAZ1PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "ContrailMinionInstanceAZ2": {
+          "Type": "AWS::EC2::Instance",
+          "Condition": "HasDeployThreeMinions",
+          "DependsOn": [ "PrivateSubnet2", "Eth0ControllerAZ2" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone2" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "MinionAMI"
+              },
+              "InstanceType": {
+                  "Ref": "ComputeInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ2" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Minion_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone2" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n", 
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"the next two lines are a patch for release 1910 and 1911. cloud image kernel is 3.10.0-957 but we need 3.10.0-1062\" \n",
+                          "yum upgrade -y kernel\n",
+                          "reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ2" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployThreeMinions",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupMinionAZ2" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailMinionAZ2PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet2" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "ContrailMinionInstanceAZ3": {
+          "Type": "AWS::EC2::Instance",
+          "Condition": "HasDeployThreeMinions",
+          "DependsOn": [ "PrivateSubnet3", "Eth0ControllerAZ3" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone3" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "MinionAMI"
+              },
+              "InstanceType": {
+                  "Ref": "ComputeInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0ControllerAZ3" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ "Minion_Instance", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone3" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo 'root:", {"Ref": "SSHPassword"}, "' | chpasswd\n",
+                          "sed -i \"s/PasswordAuthentication no/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                          "sed -i \"s/#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum remove -y chrony\n",
+                          "yum install -y ntp\n",
+                          "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n", 
+                          "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "yum install -y docker-ce-18.03.1.ce\n",
+                          "systemctl start docker\n",
+                          "systemctl status docker\n",
+                          "systemctl enable docker\n",
+                          "systemctl restart network.service\n",
+                          "echo \"the next two lines are a patch for release 1910 and 1911. cloud image kernel is 3.10.0-957 but we need 3.10.0-1062\" \n",
+                          "yum upgrade -y kernel\n",
+                          "reboot\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0ControllerAZ3" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployThreeMinions",
+          "Properties" : {
+            "Description"     : "eth0Controller",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupMinionAZ3" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailMinionAZ3PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet3" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        }
+    },
+    "Outputs" : {
+           "ContrailMinionAZ1PrivateIP": {
+                   "Description": "Contrail Minion AZ1 Private IP",
+                   "Value": {
+                               "Ref": "ContrailMinionAZ1PrivateIP"
+                       }
+           },
+           "ContrailMinionAZ2PrivateIP": {
+                   "Description": "Contrail Minion AZ2 Private IP",
+                   "Value": {
+                               "Ref": "ContrailMinionAZ2PrivateIP"
+                       }
+           },
+           "ContrailMinionAZ3PrivateIP": {
+                   "Description": "Contrail Minion AZ3 Private IP",
+                   "Value": {
+                               "Ref": "ContrailMinionAZ3PrivateIP"
+                       }
+           },
+           "SSHtoMinionAZ1": {
+                   "Description": "SSH to the contrail Minion in AZ1 from Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] root@", {"Ref": "ContrailMinionAZ1PrivateIP"} ] ] }
+           },
+           "SSHtoMinionAZ2": {
+                   "Description": "SSH to the contrail Minion in AZ2 from Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] root@", {"Ref": "ContrailMinionAZ2PrivateIP"} ] ] }
+           },
+           "SSHtoMinionAZ3": {
+                   "Description": "SSH to the contrail Minion in AZ3 from Contrail Command",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] root@", {"Ref": "ContrailMinionAZ3PrivateIP"} ] ] }
+           }
+    }
+}

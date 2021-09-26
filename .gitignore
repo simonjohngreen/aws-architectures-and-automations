@@ -1,0 +1,6 @@
+openrc.sh
+bugs-and-logs/
+not-in-git/
+aws-contrail-one-click-deployers.wiki/
+deploy-openshift.sh
+sync-openshift-with-refinitiv-git.sh

@@ -1,0 +1,983 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploys microk8s production cllluster for DevOps pipline",
+    "Parameters": {
+        "AvailabilityZone1": {
+            "Description": "AWS Availability Zone For the nodes",
+            "Type": "String",
+            "Default": "eu-west-1a"
+        },
+        "BastionInstanceType": {
+            "Description": "Contrail Bastion Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "microk8sInstanceType": {
+            "Description": "microk8s node Instance Type",
+            "Type": "String",
+            "Default": "m5.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "ContrailKey"
+        },
+        "ContainerRegistryTag": {
+            "Description": "Container Registry Tag",
+            "Type": "String",
+            "Default": "2008.121"
+        },
+        "ContainerRegistryUserName": {
+            "Description": "Container Registry User Name",
+            "Type": "String"
+        },
+        "ContainerRegistryPassword": {
+            "Description": "Container Registry User Password",
+            "Type": "String",
+            "NoEcho": true
+        },
+        "ContrailBastionPrivateSNGatewayIP": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "ConstraintDescription": "parameter must be in the form x.x.x.x",
+            "Description": "Private Network Gateway IP used by Contrail Bastion to reach the other nodes",
+            "Default": "100.72.100.1",
+            "Type": "String"
+        },
+        "DeployContrailBastion": {
+            "Description": "if true we will deploy contrail bastion",
+            "Type": "String",
+            "Default": "true"
+        },
+        "ContrailBastionAZ1PublicIP": {
+            "Description": "Contrail Bastion public static IP",
+            "Type": "String",
+            "Default": "100.72.103.10"
+        },
+        "ContrailBastionAZ1PrivateIP": {
+            "Description": "Contrail Bastion private static IP",
+            "Type": "String",
+            "Default": "100.72.100.10"
+        },
+        "UserLocation" : {
+            "Description": "The IP address range that can be used for OAM access to CC and if running HA the load balancer, both on internet. Typically your laptop /32. If left blank we will add 0.0.0./0 and allow ssh from anywhere",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "0.0.0.0/0",
+            "ConstraintDescription": "Put your Client IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "SGSubnet1": {
+            "Description": "AN IP address range allowed in security to point towards the cluster.",
+            "Type": "String",
+            "Default": "100.73.100.0/23"
+        },
+        "SGSubnet2": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "100.73.101.0/23"
+        },
+        "SGSubnet3": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "100.73.102.0/23"
+        },
+        "SGSubnet4": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "100.73.103.0/23"
+        },
+        "SiteName": {
+            "Description": "Site Name",
+            "Type": "String",
+            "Default": "microk8s"
+        },
+        "SSHPassword": {
+            "Description": "SSH Password",
+            "Type": "String",
+            "Default": "EfrtGF5EDF_d54ERrf",
+            "NoEcho": true
+        },
+        "ContrailPassword": {
+            "Description": "Contrail Bastion Password",
+            "Type": "String",
+            "NoEcho": "True",
+            "Default": "contrail123"
+        },
+        "idVPC": {
+            "Description": "Existing VPCid where the nodes will sit",
+            "Type": "String"
+        },
+        "idPublicSubnet1": {
+            "Description": "Existing Public Subnet 1 id",
+            "Type": "String"
+        },
+        "idPrivateSubnet1": {
+            "Description": "Existing Private Subnet 1 id for the nodes",
+            "Type": "String"
+        },
+        "k8sPodBaseIP": {
+            "Description": "Used as the base addess for the POD IPAM, the host ip last digit is transposed into the third digit to ensure the subnet is unique per instance",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "10.32.0.0/24"
+        },
+        "k8sServiceBaseIP": {
+            "Description": "Used as the base addess for the POD IPAM, the host ip last digit is transposed into the third digit to ensure the subnet is unique per instance",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "10.96.0.0/24"
+        },
+        "k8sFabricBaseIP": {
+            "Description": "Used as the base addess for the Fabric IPAM, the host ip last digit is transposed into the third digit to ensure the subnet is unique per instance",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "10.97.0.0/24"
+        },
+        "k8sFabricSN": {
+            "Description": "The subnet vrouters are allowed to accept tunnels on. this is proabably your VPC subnet. It ends up in config->global parameter->Fabric Subnets",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "100.72.100.0/22"
+        },
+        "k8sBaseASN": {
+            "Description": "The controller ASN base, 4-bytes, the host ip last digit is added to this in order to create a unique ASN per instances",
+            "Type": "String",
+            "MinLength": "1",
+            "MaxLength": "10",
+            "Default": "63000"
+        },
+        "k8sVersion": {
+            "Description": "Kubernetes version to install, default is 1.18.9",
+            "Type": "String",
+            "Default": "1.18.9"
+        },
+        "InstallerBGitHubInstallerLocation": {
+            "Description": "The location  to use if Github is selected",
+            "Type": "String",
+            "Default": "https://github.com/Juniper/k8s-federated-deployer.git -b release-3.11-contrail"
+        },
+        "InstallerCS3Location": {
+            "Description": "The location  to use if Github is selected",
+            "Type": "String",
+            "Default": "https://s3-eu-central-1.amazonaws.com/contrail-one-click-deployers/contrail-k8s-microk8s.yaml"
+         },
+        "NodeMTU": {
+            "Description": "MTU for the Nodes. Usefull for VPN gateways, which might need a sub 1500 MTU",
+            "Type": "String",
+            "Default": "9000"
+         },
+        "NumberOfClusters": {
+            "Description": "Number of Contrail+microK8s clusters to deploy in the auto scaling group",
+            "Type": "String",
+            "Default": "1"
+         },
+        "DebugLogs": {
+            "Description": "if true we will enable SYS_DEBUG in the contrail cni",
+            "Type": "String",
+            "Default": "false"
+        },
+        "TestPod": {
+            "Description": "if true we deploy a test pod into each node for you",
+            "Type": "String",
+            "Default": "true"
+        },
+        "FullMesh": {
+            "Description": "if true controllers are bgp meshed ",
+            "Type": "String",
+            "Default": "true"
+        },
+        "MX1Name": {
+            "Description": "MX1 bgp peer name",
+            "Type": "String",
+            "Default": "mx1"
+        },
+        "MX2Name": {
+            "Description": "MX2 bgp peer name",
+            "Type": "String",
+            "Default": "mx2"
+        },
+        "MX1ASN": {
+            "Description": "MX1 bgp peer ASN",
+            "Type": "String",
+            "Default": "64533"
+        },
+        "MX2ASN": {
+            "Description": "MX2 bgp peer ASN",
+            "Type": "String",
+            "Default": "64534"
+        },
+        "MX1Password": {
+            "Description": "MX1 password for netconf",
+            "Type": "String",
+            "NoEcho": "True",
+            "Default": "contrail123"
+        },
+        "MX2Password": {
+            "Description": "MX2 password for netconf",
+            "Type": "String",
+            "NoEcho": "True",
+            "Default": "contrail123"
+        },
+        "MX1User": {
+            "Description": "MX1 username for netconf",
+            "Type": "String",
+            "Default": "root"
+        },
+        "MX2User": {
+            "Description": "MX2 username for netconf",
+            "Type": "String",
+            "Default": "root"
+        },
+        "MX1IPAddress": {
+            "Description": "MX1 IP Address",
+            "Type": "String",
+            "Default": "10.20.30.10"
+        },
+        "MX2IPAddress": {
+            "Description": "MX2 IP Address",
+            "Type": "String",
+            "Default": "10.20.30.11"
+        },
+        "ExternaldnsEnabled": {
+            "Description": "true if you want to deploy external DNS into AWS with a test app",
+            "Type": "String",
+            "Default": "true"
+        },
+        "ExternaldnsCreateZone": {
+            "Description": "true if you want the stack to create the zone",
+            "Type": "String",
+            "Default": "true"
+        },
+        "ExternaldnsDomainFilter": {
+            "Description": "domain for the external dns to monitor",
+            "Type": "String",
+            "Default": "incubator.dev.int.foobarservices.com"
+        },
+        "ExternaldnsZoneID": {
+            "Description": "if using an existing domain enter the hosted zone ID here",
+            "Type": "String",
+            "Default": "Z09733143J0NHZEXWD6B"
+        }
+    },
+    "Mappings": {
+        "AWSRegionArch2AMI": {
+            "ca-central-1": { "UBUNTU18XHVM": "ami-0dc24446d93e1b2f3" },
+            "ap-southeast-1": { "UBUNTU18XHVM": "ami-07c4661e10b404bbb" },
+            "ap-southeast-2": { "UBUNTU18XHVM": "ami-0ff0fa9d409d5181c" },
+            "eu-west-1": { "UBUNTU18XHVM": "ami-0f52887e1cb557b55" },
+            "eu-west-2": { "UBUNTU18XHVM": "ami-0820357ff5cf2333d" },
+            "eu-west-3": { "UBUNTU18XHVM": "ami-04d53e1b6d843f8fa" },
+            "eu-central-1": { "UBUNTU18XHVM": "ami-0494594c0ab2e6df4" },
+            "cn-north-1": { "UBUNTU18XHVM": "ami-05248307900d52e3a" },
+            "cn-northwest-1": { "UBUNTU18XHVM": "ami-075c9f159ee0bdc1c" },
+            "us-east-1": { "UBUNTU18XHVM": "ami-0b893eef6e21b60a1" },
+            "us-east-2": { "UBUNTU18XHVM": "ami-0ebc84cad4ab1c308" },
+            "us-west-1": { "UBUNTU18XHVM": "ami-00da7d550c0cbaa7b" },
+            "us-west-2": { "UBUNTU18XHVM": "ami-0f004f40550f73050" },
+            "ap-northeast-1": { "UBUNTU18XHVM": "ami-071c64dd45080ce0b" },
+            "eu-north-1": { "UBUNTU18XHVM": "ami-01cc5333d19d509d3" },
+            "eu-south-1": { "UBUNTU18XHVM": "ami-0958f3c538b50dfba" },
+            "ap-south-1": { "UBUNTU18XHVM": "ami-02def66f5c32f4f2b" },
+            "ap-northeast-2": { "UBUNTU18XHVM": "ami-005ede73f888b317f" },
+            "ap-northeast-3": { "UBUNTU18XHVM": "ami-0d371383d68608b49" },
+            "af-south-1": { "UBUNTU18XHVM": "ami-07ab6ee42fc89ba35" },
+            "me-south-1": { "UBUNTU18XHVM": "ami-04b3755011880400f" },
+            "sa-east-1": { "UBUNTU18XHVM": "ami-004c8f619d7ca0f36" }
+        }
+    },
+    "Conditions": {
+        "HasDeployContrailBastion": { "Fn::Equals": [{ "Ref": "DeployContrailBastion" }, "true"] },
+        "HasExternaldnsCreateZone": { "Fn::Equals": [{ "Ref": "ExternaldnsCreateZone" }, "true"] },
+        "HasSGSubnet1": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet1" }, ""] }] },
+        "HasSGSubnet2": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet2" }, ""] }] },
+        "HasSGSubnet3": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet3" }, ""] }] },
+        "HasSGSubnet4": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet4" }, ""] }] }
+    },
+    "Resources": {
+        "R53ZONE": {
+            "Type": "AWS::Route53::HostedZone",
+            "Condition": "HasExternaldnsCreateZone",
+            "Properties": {
+               "HostedZoneConfig": {
+                  "Comment": { "Ref": "ExternaldnsDomainFilter" } 
+               },
+               "Name": { "Ref": "ExternaldnsDomainFilter" },
+               "VPCs": [
+                  {
+                     "VPCId": { "Ref": "idVPC" }, 
+                     "VPCRegion": { "Ref": "AWS::Region"}
+                  }
+               ]
+            }
+        },
+        "IPAddress1": {
+            "Type": "AWS::EC2::EIP",
+            "Condition": "HasDeployContrailBastion",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "IPAssociaton1": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "Condition": "HasDeployContrailBastion",
+            "DependsOn": "ContrailBastionInstance",
+            "Properties": {
+                "NetworkInterfaceId": { "Ref": "Eth0Bastion" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "IPAddress1",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+        "SecurityGroupContrailBastion": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployContrailBastion",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "GroupDescription": "Security group for Contrail Comand, public and on internet",
+                "GroupName": { "Fn::Join": [".", ["Contrail_Bastion_public_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "tcp",
+                        "FromPort": 8143,
+                        "ToPort": 8143,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the node1 UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2002,
+                        "ToPort": 2002,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the node2 UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2003,
+                        "ToPort": 2003,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the node3 UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2004,
+                        "ToPort": 2004,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the node3 UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9091,
+                        "ToPort": 9091,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the Contrail Comand UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access to Bastion"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 222,
+                        "ToPort": 222,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access to node"
+                    }
+                ],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Bastion_Security_Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "SecurityGroupmicrok8s": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "GroupDescription": "Security group for Contrail 1 Instances on the Private SN",
+                "GroupName": { "Fn::Join": [".", ["Controllers_Private_SG1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": { "Fn::Join": ["", [{ "Ref": "ContrailBastionAZ1PrivateIP" }, "/32"]] },
+                        "Description": "allow access to the Contrail Bastion Private IP"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail_microk8s_Private_Security_Group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SgEntry01microk8s": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupmicrok8s" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+            }
+        },
+        "SgEntry02microk8s": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupmicrok8s" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+            }
+        },
+        "SgEntry03microk8s": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupmicrok8s" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+            }
+        },
+        "SgEntry04microk8s": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupmicrok8s" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+            }
+        },
+        "SGIngressSecurityGroupmicrok8s": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupmicrok8s"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupmicrok8s"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "SGIngressSecurityGroupContrailBastion": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasDeployContrailBastion",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupContrailBastion"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupContrailBastion"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "ContrailBastionInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployContrailBastion",
+            "DependsOn": ["Eth0Bastion", "Eth1Bastion"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "100"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region"}, "UBUNTU18XHVM"]
+                },
+                "InstanceType": {
+                    "Ref": "BastionInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                        "NetworkInterfaceId": { "Ref": "Eth0Bastion" },
+                        "DeviceIndex": "0"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "Eth1Bastion" },
+                        "DeviceIndex": "1"
+                    }
+                ],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Bastion_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo \"net.ipv4.ip_forward = 1\" >> /etc/sysctl.conf\n",
+                                "/sbin/sysctl -w net.ipv4.ip_forward=1\n",
+                                "sed -i \"s/^#PermitRootLogin prohibit-password/PermitRootLogin prohibit-password/g\" /etc/ssh/sshd_config\n",
+                                "apt-get update\n",
+                                "DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent netfilter-persistent\n",
+                                "cat > /usr/bin/add-nat.sh  <<EOF\n",
+                                "VERSION=1.0\n",
+                                "while [ \"\\$1\" != \"\" ]; \n",
+                                "do\n",
+                                "   case \\$1 in\n",
+                                "    -v | --version )\n",
+                                "        echo \"Version: \\$VERSION\"\n",
+                                "        ;;\n",
+                                "    -n | --node )\n",
+                                "        NODEIP=\"\\$2\"\n",
+                                "        export MYHOSTIP=\\$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)\n",
+                                "        export PRIVATEIP=\\$(hostname -I | cut -d \" \" -f 2)\n",
+                                "        /sbin/iptables -t nat -I PREROUTING -p tcp -d \\$MYHOSTIP --dport 222 -j DNAT --to-destination \\$NODEIP:22\n",
+                                "        /sbin/iptables -t nat -I POSTROUTING -p tcp -d \\$NODEIP --dport 22 -j SNAT --to-source \\$PRIVATEIP\n",
+                                "        /sbin/iptables -I FORWARD -p tcp -d \\$NODEIP --dport 22 -j ACCEPT\n",
+                                "        /sbin/iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT\n",
+                                "        /sbin/iptables -t nat -I PREROUTING -p tcp -d \\$MYHOSTIP --dport 8143 -j DNAT --to-destination \\$NODEIP:8143\n",
+                                "        /sbin/iptables -t nat -I POSTROUTING -p tcp -d \\$NODEIP --dport 8143 -j SNAT --to-source \\$PRIVATEIP\n",
+                                "        /sbin/iptables -I FORWARD -p tcp -d \\$NODEIP --dport 8143 -j ACCEPT\n",
+                                "        iptables-save  > /etc/iptables/rules.v4\n",
+                                "        echo \"to accss the node using ssh: ssh -i [ssh key file] centos@[bastion public ip] -p 222\"\n",
+                                "        echo \"to accss the nodes contrail ip: https://[bastion public ip]:8143\"\n",
+                                "        echo \"Note: if you rerun to access a different node you will have to clear your browser cache\"\n",
+                                "        exit\n",
+                                "        ;;\n",
+                                "    -h | --help ) \n",
+                                "         echo \"Usage: add-nat -h HOST_IP\"\n",
+                                "         echo \"OPTION includes:\"\n",
+                                "         echo \"   -v | --version - prints out version information for this script\"\n",
+                                "         echo \"   -n | --node - ip address of the node to nat towards\"\n",
+                                "         echo \"   -h | --help - displays this message\"\n",
+                                "         exit\n",
+                                "      ;;\n",
+                                "    * ) \n",
+                                "        echo \"Invalid option: \\$1\"\n",
+                                "        echo \"Usage: add-nat -h HOST_IP\"\n",
+                                "        echo \"OPTION includes:\"\n",
+                                "        echo \"   -v | --version - prints out version information for this script\"\n",
+                                "        echo \"   -n | --node - ip address of the node to nat towards\"\n",
+                                "        echo \"   -h | --help - displays this message\"\n",
+                                "        exit\n",
+                                "       ;;\n",
+                                "  esac\n",
+                                "  shift\n",
+                                "done\n",
+                                "EOF\n",
+                                "chmod a+x /usr/bin/add-nat.sh\n",
+                                "apt-get install -y ntp\n",
+                                "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n",
+                                "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n",
+                                "systemctl enable ntp\n",
+                                "systemctl restart ntp\n",
+                                "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                                "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "#netplan add the second interface\n",
+                                "cat > /etc/netplan/60-bastion.yaml <<EOF\n",
+                                "network:\n",
+                                "    ethernets:\n",
+                                "        ens4:\n",
+                                "            dhcp4: true\n",
+                                "            dhcp4-overrides:\n",
+                                "                use-routes: false\n",
+                                "            dhcp6: false\n",
+                                "    version: 2\n",
+                                "EOF\n",
+                                "netplan apply\n",
+                                "systemctl restart ssh.service\n",
+                                "echo \"all done\"\n"
+                        ]
+                    ]
+                }
+              }
+            }
+        },
+        "Eth0Bastion" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployContrailBastion",
+          "Properties" : {
+            "Description"     : "eth0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailBastion" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailBastionAZ1PublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "idPublicSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "Eth1Bastion" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Condition": "HasDeployContrailBastion",
+          "Properties" : {
+            "Description"     : "eth1",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupContrailBastion" } ],
+            "PrivateIpAddress" : { "Ref" : "ContrailBastionAZ1PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "idPrivateSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 1"}, {"Key" : "Interface", "Value" : "eth1"} ]
+            }
+        },
+        "microk8sNodeLaunchConfig" : {
+           "Type" : "AWS::AutoScaling::LaunchConfiguration",
+           "Properties" : {
+              "ImageId": {
+                 "Fn::FindInMap" : ["AWSRegionArch2AMI", {"Ref" : "AWS::Region"}, "UBUNTU18XHVM"]
+              },
+              "SecurityGroups" : [ { "Ref" : "myEC2SecurityGroup" }, "myExistingEC2SecurityGroup" ],
+              "InstanceType": {
+                 "Ref": "microk8sInstanceType"
+              },
+              "BlockDeviceMappings": [
+                 {
+                      "DeviceName": "/dev/sda1",
+                      "Ebs": {
+                      "VolumeSize": "300"
+                      }
+                 }
+              ],
+              "KeyName": {
+                 "Ref": "KeyName"
+              },
+              "IamInstanceProfile": { "Ref": "microk8sInstanceProfile" },
+              "SecurityGroups"        : [ { "Ref" : "SecurityGroupmicrok8s" } ],
+              "LaunchConfigurationName" : "microk8sNodeLaunchConfig",
+              "UserData": {
+                 "Fn::Base64": {
+                   "Fn::Join": [
+                       "",
+                       [ 
+                         "#!/bin/bash -x\n",
+                         "exec > /tmp/part-001.log 2>&1\n",
+                               "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                               "mkdir /root/.ssh\n",
+                               "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/id_rsa.pub\n",
+                               "echo -e \"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu42GJ4sfwlJ9rtetaqDfyZr/S56+RPfzHT+KQc142H6lVPYu\n8B89p0p3zE1mkQ7r9X8OGpK7MA3u0Nn97y5zo6udAJXIGoH50wzUAjYIPEup0bwk\nPU8ZBlB2Sy2dive853w1LoNiywgvbKK/edyEDqWRYh9rBPZt2TI0QSYEiHRjQclZ\nGPYbtLqaGQTmOYzwtuMwpcF7B/NTc/Rg03HgmmmuV/O1tzw2Dh5/X8ro2sZepV5H\nLHI76AnUFPE2FgsWO3djHkvU6c1UCIciRp7SAGdYBkpCC/9MVv6SFT+27YxWk6zu\n7mwtrGwf0cBIyVmwXXHtTWf8o+0Bul/IV3xinwIDAQABAoIBAF2Q6ieaIZr5Olha\noto6LcrPN6PLKxMPO8sQovHXBv3CmMq9EoeanlByNzfGOXAOqKrN2wRoxVfg645n\n4mZLn0c821OqZazLwQ2ILdB4kj06ZhsLKG0po8thotI4jIsCsswtS/7LbyLpD3e7\n7Zhm6b7A3Lm+AM71/bFIeYcy5zoHMnDbNmNKdyMn4WWyqrbcdC21T9psRGXiRIE+\n5sIOI1pU9fz0yzO9nFXGjidyhNqbAFDFoDHmazs7OMiY97GphyiUlh8hj/Mwrjzg\n8Uk8yLw8sMH41mm/eoWlp9VaRqZgUK+lgakxCHuk1hAsrJnSW5NnCOHRjFCe5OAY\nMY4zdNECgYEA9MBK/Gc/3utvDXSVusIUBkedlmzWcKDkQdzgNQB1Y59AN2jwt6oP\nFwEVGgR4TDm2BPy+pxoEqTHNIh/5gTVIgp3O6uX8zDSRNclqYnIehtimZR3jetRS\nzuGZbO9603KakRTJRGh04Ggy5yDvBHRK7OyotLXoyCNebcJZbMB6JskCgYEAxCw+\nb7+Sb4L7adVs+2UAC2vCnmXUadsx+LfeDvSb3xAoz+vtq5MR21mnT47irC+v+tsC\neoP1F7zNiIez454oJebeu8Nk/REXPlxPCi6LgZrDsHsxTfNXvJUk5Yt6rSanxSrH\nT7zLLsF4AxY5oEyD+X4Xlrd4lHTxiWoHPMqnqicCgYBf6he40HGcV6FeoYin9rTI\nPTqJn79txe+NzBRlUPewAdG1pT9oipF9T2RInOXT4W3uiGnirHSVJbohHGy38Pyo\ni1VygozOLe+WJ4e0asqBx9d1mv/xu9Fz1787jKISyT+/iWjSkSj0ZIFGSIbCtRxD\nuv7mSr+d5xZzZw2Ka+ey2QKBgF5lq+W6GYzvSmuy965A+7SDNjNibMRDZdh5IbGw\noxDDheAHd2aIbp9OlOQDra+NgvEDUj4CIX46q+x24Gk3Qbp7TdKsQ3xDLRwk7yPH\nIfpLrr7NiPwpjJ6CZi7O30lSwIhv/VixUFQ/ZLCXkUNBjoAP3On5f1xwqYmmK7Vl\nDykhAoGBALPivmGopBZhADOiJj7pIIeVB31uXnzCog3SfSvS4bVeRdLsyRct6vnI\n94wexgUA7CfWgQqqdgARSAe2JL5C9FEQKwa6lPfoi9Ft6NrO5UX7oqDgEVinQZzZ\nnYfyuaPvdQoBO5LE14jHfKTws+/vbgc0u7zONkOwpiHHLIhfJocA\n-----END RSA PRIVATE KEY-----\" | tee --append /root/.ssh/id_rsa\n",
+                               "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                               "chmod 0600 /root/.ssh/id_rsa*\n",
+                               "systemctl restart sshd.service\n",
+                               "# echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                               "# echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                               "# echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                               "# ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                               "# cd /root\n",
+                               "# wget ", { "Ref": "InstallerCS3Location" }, " -O contrail-k8s-microk8s.yaml\n",
+                               "# modprobe br_netfilter\n",
+                               "# setenforce 0\n",
+                               "# sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config\n",
+                               "# sed -i '/swap/d' /etc/fstab\n",
+                               "swapoff -a\n",
+                               "#################\n",
+                               "#install microk8s\n",
+                               "#################\n",
+                               "snap install microk8s --classic\n",
+                               "microk8s status --wait-ready\n",
+                               "microk8s enable dashboard dns registry istio\n",
+                               "microk8s kubectl get all --all-namespaces\n",
+                               "alias kubectl='microk8s kubectl'\n",
+                               "echo \"alias kubectl='microk8s kubectl'\" >> /root/.bashrc \n",
+                               "echo \"alias kubectl='microk8s kubectl'\" >> /home/ubuntu/.bashrc \n",
+                               "#################\n",
+                               "#install contrail\n",
+                               "#################\n",
+                               "# yum install -y ntp yum-utils device-mapper-persistent-data lvm2 lsof unzip\n",
+                               "# yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n",
+                               "# systemctl enable ntpd\n",
+                               "# systemctl start ntpd\n",
+                               "# sed -i -e \"s/\\[CONTR1\\]/$(hostname -I | awk '{print $1}')/g\" contrail-k8s-microk8s.yaml \n",
+                               "# sed -i -e \"s/\\[K8SAPI\\]/$(hostname -I | awk '{print $1}')/g\" contrail-k8s-microk8s.yaml \n",
+                               "# sed -i -e \"s/\\[RELEASE\\]/", { "Ref": "ContainerRegistryTag" }, "/g\" contrail-k8s-microk8s.yaml \n",
+                               "# sed -i -e \"s/\\[K8SAPIPORT\\]/6443/g\" contrail-k8s-microk8s.yaml \n",
+                               "# export MYDIGIT=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4 | cut -d\".\" -f 4)\n",
+                               "# export HOSTASN=$((", { "Ref": "k8sBaseASN" }, " + MYDIGIT))\n",
+                               "# sed -i -e \"s/\\[ASN\\]/$HOSTASN/g\" contrail-k8s-microk8s.yaml \n",
+                               "# export PODIPAM=$(echo ", { "Ref": "k8sPodBaseIP" }, " | awk -F'.' -v OFS=\".\" '$3=ENVIRON[\"MYDIGIT\"]')\n",
+                               "# export SERVICEIPAM=$(echo ", { "Ref": "k8sServiceBaseIP" }, " | awk -F'.' -v OFS=\".\" '$3=ENVIRON[\"MYDIGIT\"]')\n",
+                               "# export FABRICIPAM=$(echo ", { "Ref": "k8sFabricBaseIP" }, " | awk -F'.' -v OFS=\".\" '$3=ENVIRON[\"MYDIGIT\"]')\n",
+                               "# kubeadm init --pod-network-cidr=$PODIPAM --service-cidr $SERVICEIPAM\n",
+                               "# mkdir -p /root/.kube\n",
+                               "# cp -i /etc/kubernetes/admin.conf /root/.kube/config\n",
+                               "# chown $(id -u):$(id -g) /root/.kube/config\n",
+                               "# export KUBECONFIG=/root/.kube/config\n",
+                               "# export PODIPAM=$(sed 's/\\//\\\\\\//g' <<< $PODIPAM)\n",
+                               "# export SERVICEIPAM=$(sed 's/\\//\\\\\\//g' <<< $SERVICEIPAM)\n",
+                               "# export FABRICIPAM=$(sed 's/\\//\\\\\\//g' <<< $FABRICIPAM)\n",
+                               "# echo \"asn $HOSTASN\"\n",
+                               "# echo \"pod_ipam $PODIPAM\"\n",
+                               "# echo \"service_ipam $SERVICEIPAM\"\n",
+                               "# echo \"service_ipam $FABRICIPAM\"\n",
+                               "# sed -i -e \"s/\\[PODSN\\]/$PODIPAM/g\" contrail-k8s-microk8s.yaml \n",
+                               "# sed -i -e \"s/\\[SERVICESN\\]/$SERVICEIPAM/g\" contrail-k8s-microk8s.yaml \n",
+                               "# sed -i -e \"s/\\[FABRICSN\\]/$FABRICIPAM/g\" contrail-k8s-microk8s.yaml \n",
+                               "# if [ ", { "Ref": "DebugLogs" }, " == true ] ; then\n",
+                               "#     echo \"Enabling Contrail debug logs\"\n",
+                               "#     sed -i -e \"s/SYS_NOTICE/SYS_DEBUG/g\" contrail-k8s-microk8s.yaml \n",
+                               "# fi\n",
+                               "# kubectl label node --all node-role.opencontrail.org/agent=\n",
+                               "# kubectl create secret docker-registry contrail-registry --namespace=kube-system --docker-server=hub.juniper.net --docker-username=", { "Ref": "ContainerRegistryUserName" }, " --docker-password=", { "Ref": "ContainerRegistryPassword" }, " --docker-email=sgreen@juniper.net\n",
+                               "# mkdir -p /var/lib/contrail/config-zookeeper \n",
+                               "# kubectl apply -f contrail-k8s-microk8s.yaml \n",
+                               "# cat > /root/wait-for-pods.sh <<EOF\n",
+                               "# #!/bin/bash\n",
+                               "# while [[ \\$(kubectl  get pods --no-headers=true -n kube-system | wc -l) -le 5 ]];\n",
+                               "# do\n",
+                               "#      echo \"waiting for pods to show up\" && sleep 10;\n",
+                               "# done\n",
+                               "# for  i in \\$(kubectl  get pods --no-headers=true -n kube-system | awk '/contrail-/{print \\$1}')\n",
+                               "# do\n",
+                               "#        while [[ \\$(kubectl  get pod \\$i -n kube-system -o 'jsonpath={..status.conditions[?(@.type==\"Ready\")].status}') != \"True\" ]];\n",
+                               "#        do\n",
+                               "#              echo \"waiting for pod \\$i\" && sleep 10;\n",
+                               "#        done\n",
+                               "# done\n",
+                               "# EOF\n",
+                               "# chmod a+x /root/wait-for-pods.sh\n",
+                               "# /root/wait-for-pods.sh\n",
+                               "# kubectl get pods --all-namespaces\n",
+                               "# kubectl get pods -n kube-system -oname |grep coredns |xargs kubectl delete -n kube-system\n",
+                               "# docker login hub.juniper.net --username ", { "Ref": "ContainerRegistryUserName" }, " --password ", { "Ref": "ContainerRegistryPassword" }, "\n",
+                               "# export PODNAME=$(kubectl get pods -n kube-system --no-headers=true | awk '/contrail-controller-config/{print $1}' | head -n 1)\n",
+                               "# export MYHOSTNAME=$(curl http://169.254.169.254/latest/meta-data/hostname)\n",
+                               "# export MYHOSTIP=$(curl http://169.254.169.254/latest/meta-data/local-ipv4)\n",
+                               "# wget https://s3-eu-central-1.amazonaws.com/contrail-one-click-deployers/Testing-k8s.zip -O /root/Testing-k8s.zip \n",
+                               "# unzip /root/Testing-k8s.zip -d /root \n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_global_vrouter_config.py --api_server_ip $MYHOSTIP --oper add --admin_user admin --admin_password ", { "Ref": "ContrailPassword" }, " --admin_tenant_name admin --flow_export_rate -1 \n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/add_route_target.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_asn 64513 --route_target_number 1000 --routing_instance_name default-domain:k8s-default:k8s-default-pod-network:__default__\n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/add_route_target.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_asn 64513 --route_target_number 1000 --routing_instance_name default-domain:k8s-default:k8s-default-service-network:__default__\n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_mx.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_name ", { "Ref": "MX1Name" }, " --router_ip ", { "Ref": "MX1IPAddress" }, " --product_name MX80 --device_user ", { "Ref": "MX1User" }, " --device_password ", { "Ref": "MX1Password" }, " --router_asn ", { "Ref": "MX1ASN" }, " --peer_list $MYHOSTNAME --oper add\n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_mx.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_name ", { "Ref": "MX2Name" }, " --router_ip ", { "Ref": "MX2IPAddress" }, " --product_name MX80 --device_user ", { "Ref": "MX2User" }, " --device_password ", { "Ref": "MX2Password" }, " --router_asn ", { "Ref": "MX2ASN" }, " --peer_list $MYHOSTNAME --oper add\n",
+                               "# export K8SSERVICEIP=$(kubectl get service/kubernetes --no-headers | awk '{print $3}')\n",
+                               "# kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_linklocal.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --linklocal_service_name default-domain-k8s-default-kubernetes-443 --linklocal_service_ip $K8SSERVICEIP --linklocal_service_port 443 --ipfabric_service_ip $MYHOSTIP --ipfabric_service_port 6443 --oper add\n",
+                               "# cd /tmp \n",
+                               "# curl \"https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip\" -o \"awscliv2.zip\" \n",
+                               "# unzip awscliv2.zip \n",
+                               "# ./aws/install \n",
+                               "# cat > /usr/bin/addbgpmesh.sh  <<EOF\n",
+                               "# #!/bin/bash\n",
+                               "# export BASEASN=", { "Ref": "k8sBaseASN" }, " \n",
+                               "# export PODNAME=\\$(kubectl get pods -n kube-system --no-headers=true | awk '/contrail-controller-config/{print \\$1}' | head -n 1) \n",
+                               "# for ID in \\$(/usr/local/bin/aws autoscaling describe-auto-scaling-instances --region eu-west-1 --query AutoScalingInstances[].InstanceId --output text); \n",
+                               "# do \n",
+                               "#     export REMOTEHOSTIP=\\$(/usr/local/bin/aws ec2 describe-instances --instance-ids \\$ID --region eu-west-1 --query Reservations[].Instances[].PrivateIpAddress --output text) \n",
+                               "#     export REMOTEHOSTDIGIT=\\$(echo \\$REMOTEHOSTIP | cut -d\".\" -f 4) \n",
+                               "#     export MYHOSTNAME=\\$(curl -s http://169.254.169.254/latest/meta-data/hostname) \n",
+                               "#     export MYHOSTIP=\\$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) \n",
+                               "#     if [[ \\$REMOTEHOSTIP != \\$MYHOSTIP ]] \n",
+                               "#     then \n",
+                               "#          echo \"adding bgp peer for \\$REMOTEHOSTIP\" \n",
+                               "#          export ASN=\\$(( \\$BASEASN + \\$REMOTEHOSTDIGIT )) \n",
+                               "#          echo \"asn is \\$ASN\" \n",
+                               "#          kubectl exec -it \\$PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_sub_cluster.py --sub_cluster_name microk8sNode\\$REMOTEHOSTDIGIT --api_server_ip \\$MYHOSTIP --oper add --sub_cluster_asn \\$ASN --admin_user admin --admin_password contrail123 --admin_tenant admin --api_server_port 8082 \n",
+                               "#          kubectl exec -it \\$PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/provision_control.py --host_ip \\$REMOTEHOSTIP --api_server_ip \\$MYHOSTIP --router_asn \\$ASN --oper add --admin_user admin --admin_password contrail123 --host_name microk8sNode\\$REMOTEHOSTDIGIT --admin_tenant admin --api_server_port 8082 --sub_cluster_name microk8sNode\\$REMOTEHOSTDIGIT --peer_list \\$MYHOSTNAME \n",
+                               "#     fi \n",
+                               "# done \n",
+                               "# EOF\n",
+                               "# chmod a+x /usr/bin/addbgpmesh.sh\n",
+                               "# if [ ", { "Ref": "FullMesh" }, " == true ] ; then\n",
+                               "#     /usr/bin/addbgpmesh.sh\n",
+                               "# fi\n",
+                               "# kubectl taint nodes --all node-role.kubernetes.io/master:NoSchedule- \n",
+                               "# if [ ", { "Ref": "TestPod" }, " == true ] ; then\n",
+                               "#     cd /root/Testing-k8s \n",
+                               "#     /root/Testing-k8s/TestPod.sh \n",
+                               "#     kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/add_route_target.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_asn 64513 --route_target_number 3000 --routing_instance_name default-domain:k8s-testing:k8s-testing-pod-network:__default__\n",
+                               "#     kubectl exec -it $PODNAME -n kube-system -c contrail-controller-config-api -- python /opt/contrail/utils/add_route_target.py --api_server_ip $MYHOSTIP --api_server_port 8082 --admin_user admin --admin_password contrail123 --admin_tenant_name admin --router_asn 64513 --route_target_number 3000 --routing_instance_name default-domain:k8s-testing:k8s-testing-service-network:__default__\n",
+                               "# fi\n",
+                               "# if [ ", { "Ref": "ExternaldnsEnabled" }, " == true ] ; then\n",
+                               "#     echo \"Enabling External DNS\"\n",
+                               "#     sed -i -e \"s/\\[ExternaldnsDomainFilter\\]/" , { "Ref": "ExternaldnsDomainFilter" }, "/g\" /root/Testing-k8s/edns.yaml \n",
+                               "#     sed -i -e \"s/\\[ExternaldnsDomainFilter\\]/" , { "Ref": "ExternaldnsDomainFilter" }, "/g\" /root/Testing-k8s/dns-test.yaml \n",
+                               "#     if [ ", { "Ref": "ExternaldnsCreateZone" }, " == true ] ; then\n",
+                               "#         export ZONEID=" , {"Fn::If": ["HasExternaldnsCreateZone", {"Ref": "R53ZONE"}, {"Ref": "AWS::NoValue"}]}, "\n",
+                               "#         echo \"From Resource ZONEID=$ZONEID\"\n",
+                               "#     else\n",
+                               "#         export ZONEID=" , { "Ref": "ExternaldnsZoneID" }, "\n",
+                               "#         echo \"From varaible ZONEID=$ZONEID\"\n",
+                               "#     fi\n",
+                               "#     sed -i -e \"s/\\[ExternaldnsZoneID\\]/$ZONEID/g\" /root/Testing-k8s/edns.yaml \n",
+                               "#     sed -i -e \"s/\\[MYDIGIT\\]/$MYDIGIT/g\" /root/Testing-k8s/dns-test.yaml \n",
+                               "#     sed -i -e \"s/\\[MYDIGIT\\]/$MYDIGIT/g\" /root/Testing-k8s/edns.yaml \n",
+                               "#     kubectl apply -f /root/Testing-k8s/edns.yaml \n",
+                               "#     kubectl apply -f /root/Testing-k8s/dns-test.yaml \n",
+                               "# fi\n",
+                               "mkdir -p /var/lib/contrail/config-zookeeper\n",
+                               "apt-get update\n",
+                               "apt-get remove -y --purge unattended-upgrades\n",
+                               "apt install -y python-pip\n",
+                               "pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n",
+                               "/usr/local/bin/cfn-signal -e $? ",
+                                   "  --stack ", { "Ref": "AWS::StackName" },
+                                   "  --resource microk8sNodeAutoScalingGroup " ,
+                                   "  --region ", { "Ref" : "AWS::Region" }, "\n"
+                       ]
+                    ]
+                 }
+             }
+           }
+        },
+        "microk8sNodeAutoScalingGroup" : {
+           "Type" : "AWS::AutoScaling::AutoScalingGroup",
+           "Properties" : {
+              "VPCZoneIdentifier" : [ { "Ref": "idPrivateSubnet1" } ],
+              "LaunchConfigurationName" : { "Ref" : "microk8sNodeLaunchConfig" },
+              "MinSize" : { "Ref": "NumberOfClusters" },
+              "MaxSize" : { "Ref": "NumberOfClusters" },
+              "Tags": [
+                   {
+                       "Key": "Name",
+                       "Value": { "Fn::Join" : [ ".", [ "kubernetes_microk8s_autoscaling_group", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] },
+                       "PropagateAtLaunch": "true"
+                   }
+               ]
+           },
+           "CreationPolicy": {
+              "ResourceSignal": {
+                "Count": "1",
+                "Timeout": "PT30M"
+              }
+           }
+        },
+        "microk8sRole": {
+           "Type": "AWS::IAM::Role",
+           "Properties": {
+              "AssumeRolePolicyDocument": {
+                 "Statement": [{
+                    "Effect": "Allow",
+                    "Principal": {
+                       "Service": ["ec2.amazonaws.com"]
+                    },
+                    "Action": ["sts:AssumeRole"]
+                 }]
+              },
+              "Path": "/"
+           }
+        },
+        "microk8sInstanceProfile": {
+           "Type": "AWS::IAM::InstanceProfile",
+           "Properties": {
+              "Path": "/",
+              "Roles": [{ "Ref": "microk8sRole" }]
+           }
+        },
+        "microk8sRolePolicies":{
+            "Type":"AWS::IAM::Policy",
+            "Properties":{
+               "PolicyName":"microk8sIAMPolicy",
+               "PolicyDocument":{
+                  "Statement":[
+                     {
+                        "Effect":"Allow",
+                        "Action":[
+                           "ec2:DescribeInstances",
+                           "autoscaling:DescribeAutoScalingInstances"
+                        ],
+                        "Resource":"*"
+                     },
+                     {
+                        "Effect":"Allow",
+                        "Action":[
+                           "route53:ChangeResourceRecordSets"
+                        ],
+                        "Resource":"arn:aws:route53:::hostedzone/*"
+                     },
+                     {
+                        "Effect":"Allow",
+                        "Action":[
+                           "route53:ListHostedZones",
+                           "route53:ListResourceRecordSets"
+                        ],
+                        "Resource":"*"
+                     }
+                  ]
+               },
+               "Roles":[
+                  {
+                     "Ref":"microk8sRole"
+                  }
+               ]
+            }
+        }
+    },
+    "Outputs": {
+        "ContrailBastionWebUI": {
+            "Description": "Contrail Bastion Web UI, please give it a few minutes to build",
+            "Value":  { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":9091" ] ] }
+        },
+        "ContrailBastionAZ1PublicIP": {
+            "Description": "Contrail Bastion Public IP",
+            "Value": {
+                "Ref": "IPAddress1"
+            }
+        },
+        "SSHtoContrailBastion": {
+            "Description": "SSH to contrail bastion",
+            "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] ubuntu@", {"Ref": "IPAddress1"}, "" ] ] }
+        },
+        "EnableAccessTomicrok8sNode": {
+            "Description": "enable ssh and contrail ui access to an microk8s via Contrail Bastion",
+            "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] ubuntu@", {"Ref": "IPAddress1"}, " sudo /usr/bin/add-nat.sh -n [node ip address] " ] ] }
+        },
+        "SSHTomicrok8sNode": {
+            "Description": "ssh to microk8s node via Contrail Bastion",
+            "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] ubuntu@", {"Ref": "IPAddress1"}, " -p 222 " ] ] }
+        },
+        "UIAccessmicrok8sNode": {
+            "Description": "Contrail web UI on the microk8s node via Contrail Bastion",
+            "Value": { "Fn::Join": [ "", [ "https://", {"Ref": "IPAddress1"}, ":8143 " ] ] }
+        },
+        "Note1": {
+            "Description": "NA",
+            "Value": "Note: if you rerun add-nat.sh to access a different node you will have to clear your browser cache" 
+        },
+        "IPAddress1": {
+            "Description": "Bastion Public IP",
+            "Value": {"Ref":"IPAddress1"} 
+        }
+    }
+}

@@ -1,0 +1,760 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "This automated stacks deploys a vMX in an existing VPC, Pub Subnet, Prive Subnet, Route table, Adds security. It configures the vMX ready to act as an SDN gateway.",
+    "Parameters": {
+        "AvailabilityZone1": {
+            "Description": "AWS Availability Zone For the SDN Gateway",
+            "Type": "String",
+            "Default": "eu-west-1a"
+        },
+        "SDNGatewayInstanceType": {
+            "Description": "SDN Gateway Instance Type. By default we run in lite mode",
+            "Type": "String",
+            "Default": "m4.xlarge"
+        },
+        "RouteTargetInt1": {
+            "Default": "1001",
+            "Description": "Route target for ge-0/0/1",
+            "Type": "String"
+        },
+        "RouteTargetInt2": {
+            "Default": "1002",
+            "Description": "Route target for ge-0/0/2",
+            "Type": "String"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "ContrailKey"
+        },
+        "SDNGatewayFXP0PublicIP": {
+            "Description": "SDN Gateway public static IP",
+            "Type": "String",
+            "Default": "100.72.100.211"
+        },
+        "SDNGatewayFXP0PublicIPSN": {
+            "Description": "SDN Gateway public static IP SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE000": {
+            "Description": "SDN Gateway private static IP on GE000 used for contrail controller traffic",
+            "Type": "String",
+            "Default": "100.72.100.31"
+        },
+        "SDNGatewayAZ1PrivateIPGE000SN": {
+            "Description": "SDN Gateway private static IP on GE000 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE000AWSGW": {
+            "Description": "AWS GW IP on the private subnets (control and data plane traffic)",
+            "Type": "String",
+            "Default": "100.72.100.1"
+        },
+        "SDNGatewayAZ1PrivateIPGE001": {
+            "Description": "SDN Gateway private static IP on GE001",
+            "Type": "String",
+            "Default": "100.72.101.4"
+        },
+        "SDNGatewayAZ1PrivateIPGE001SN": {
+            "Description": "SDN Gateway private static IP on GE001 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE002": {
+            "Description": "SDN Gateway private static IP on GE002",
+            "Type": "String",
+            "Default": "100.72.101.68"
+        },
+        "SDNGatewayAZ1PrivateIPGE002SN": {
+            "Description": "SDN Gateway private static IP on GE002 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "UserLocation" : {
+            "Description": "The IP address range that can be used for OAM access directly to the Gateway instance over internet. Typically your laptop /32. If left blank we will add 0.0.0./0 and allow ssh from anywhere",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "0.0.0.0/0",
+            "ConstraintDescription": "Put your Client IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "SGSubnet1": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet2": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet3": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet4": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SiteName": {
+            "Description": "Site Name",
+            "Type": "String",
+            "Default": "SDNGateway1"
+        },
+        "SSHEncryptedPassword": {
+            "Description": "SSH Encrypted Password",
+            "Type": "String",
+            "Default": "$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.",
+            "NoEcho": true
+        },
+        "ContrailbgppeerIP1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP1 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.13",
+            "Type": "String"
+        },
+        "ContrailbgppeerIP2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP2 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.14",
+            "Type": "String"
+        },
+        "ContrailbgppeerIP3": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP3 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.15",
+            "Type": "String"
+        },
+        "ContrailbgpASN": {
+            "Description": "Contrail BGP Peer ip address x.x.x.x",
+            "Default": "64512",
+            "Type": "String"
+        },
+        "ContrailUnderlayNetwork": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "in the form x.x.x.x/xx",
+            "Description": "Contrails underlay Network CIDR for BGP and MPLSoUDP in the form x.x.x.x/xx",
+            "Default": "172.30.0.0/16",
+            "Type": "String"
+        },
+        "ContrailOverlayNetworks": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "in the form x.x.x.x/xx",
+            "Description": "Contrails Overlay Networks to accept, Supernet in the form x.x.x.x/xx",
+            "Default": "10.32.0.0/12",
+            "Type": "String"
+        },
+        "idVPC": {
+            "Description": "Existing VPCid where the SDN Gateway will sit",
+            "Type": "String"
+        },
+        "idPublicSN": {
+            "Description": "Existing public Subnet for FXP0",
+            "Type": "String"
+        },
+        "idPrivateSN": {
+            "Description": "Existing private Subnet for GE000",
+            "Type": "String"
+        },
+        "idRouteTable1a": {
+            "Description": "Existing Route Tables for Private Subnet 1a",
+            "Type": "String"
+        },
+        "idRouteTable1b": {
+            "Description": "Existing Route Tables for Private Subnet 1b",
+            "Type": "String"
+        },
+        "idRouteTable1c": {
+            "Description": "Existing Route Tables for Private Subnet 1c",
+            "Type": "String"
+        },
+        "PODSubnet": {
+            "Description": "POD Subnet so we can add a route towards the MX in the existing route table",
+            "Type": "String"
+        },
+        "ServiceSubnet": {
+            "Description": "SEERVICE Subnet so we can add a route towards the MX in the existing route table",
+            "Type": "String"
+        }
+    },
+    "Mappings": {
+        "AWSRegionArch2AMIR18PAYG": {
+            "eu-central-1": { "VMXHVM": "ami-01d92771730e32cd9" },
+            "ap-southeast-2": { "VMXHVM": "ami-06802f78db7a687f2" },
+            "eu-west-1": { "VMXHVM": "ami-08d42f017ad3870f2" },
+            "us-east-1": { "VMXHVM": "ami-0c27852fa00391f54" },
+            "us-east-2": { "VMXHVM": "ami-05aa93d5f6932b707" },
+            "us-west-2": { "VMXHVM": "ami-0e86bb4f89f845f0c" },
+            "ap-northeast-1": { "VMXHVM": "ami-052d8f3d93bb0dcac" },
+            "eu-west-2": { "VMXHVM": "ami-0346a364c86458dd9" },
+            "eu-west-3": { "VMXHVM": "ami-01f0bd231424c5541" },
+            "ap-southeast-1": { "VMXHVM": "ami-03cb7b2081381ea67" },
+            "eu-north-1": { "VMXHVM": "ami-af62ead1" },
+            "ap-south-1": { "VMXHVM": "ami-0676729a6c4bfae96" },
+            "ap-northeast-2": { "VMXHVM": "ami-09aa2ca6605222c2a" },
+            "sa-east-1": { "VMXHVM": "ami-0e40c323dd59d6b7f" }
+        },
+        "AWSRegionArch2AMIR19BYOL": {
+            "eu-central-1": { "VMXHVM": "ami-0c909c0cb95ea516c" },
+            "ap-southeast-2": { "VMXHVM": "ami-0a40f79fe18e8f533" },
+            "eu-west-1": { "VMXHVM": "ami-0ad95096c95740994" },
+            "us-east-1": { "VMXHVM": "ami-058765f5dec711ffa" },
+            "us-east-2": { "VMXHVM": "ami-0ef9b8961acd0a1c8" },
+            "us-west-2": { "VMXHVM": "ami-0781d045dc5b2d427" },
+            "ap-northeast-1": { "VMXHVM": "ami-00f30a38d8a453af1" },
+            "eu-west-2": { "VMXHVM": "ami-0c20283d59ade6460" },
+            "eu-west-3": { "VMXHVM": "ami-037ebcc38ee13c894" },
+            "ap-southeast-1": { "VMXHVM": "ami-0f35be28517f75e3e" },
+            "eu-north-1": { "VMXHVM": "ami-0b3143844e6e605be" },
+            "ap-south-1": { "VMXHVM": "ami-0643f4f6b95785ec9" },
+            "ap-northeast-2": { "VMXHVM": "ami-0ca8ddbef790d121c" },
+            "sa-east-1": { "VMXHVM": "ami-0cd239c3c7b78efe2" }
+        }
+    },
+    "Conditions": {
+        "HasSGSubnet1": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet1" }, "notset"] }] },
+        "HasSGSubnet2": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet2" }, "notset"] }] },
+        "HasSGSubnet3": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet3" }, "notset"] }] },
+        "HasSGSubnet4": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet4" }, "notset"] }] },
+        "HasSGContrailUnderlayNetwork": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "ContrailUnderlayNetwork" }, "notset"] }] }
+    },
+    "Resources": {
+        "SDNGWFXP0PUBLICIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "PrivateSubnetRoute1a": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1a" },
+                "DestinationCidrBlock": { "Ref": "PODSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "PrivateSubnetRoute1b": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1b" },
+                "DestinationCidrBlock": { "Ref": "PODSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "PrivateSubnetRoute1c": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1c" },
+                "DestinationCidrBlock": { "Ref": "PODSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "PrivateSubnetRoute1d": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1a" },
+                "DestinationCidrBlock": { "Ref": "ServiceSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "PrivateSubnetRoute1e": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1b" },
+                "DestinationCidrBlock": { "Ref": "ServiceSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "PrivateSubnetRoute1f": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": { "Ref": "idRouteTable1c" },
+                "DestinationCidrBlock": { "Ref": "ServiceSubnet" },
+                "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" }
+            }
+        },
+        "SecurityGroupSDNGW": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "GroupDescription": "Security group for the SDN Gateway, public and on internet",
+                "GroupName": { "Fn::Join": [".", ["SDN_Gateway_public_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    }
+                ],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["SDN_Gateway_Security_Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "SgEntryGW01": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet1"
+            }
+        },
+        "SgEntryGW02": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet2"
+            }
+        },
+        "SgEntryGW03": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet3"
+            }
+        },
+        "SgEntryGW04": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet4"
+            }
+        },
+        "SgEntryContrailUnderlaySN": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGContrailUnderlayNetwork",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "ContrailUnderlayNetwork" },
+                "Description": "allow inbound traffic to the SDN Gateway from the contrail underlay subnet"
+            }
+        },
+        "SGIngressSecurityGroupSDNGW": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupSDNGW"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupSDNGW"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "SDNGatewayInstance": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["Eth0SDNGateway", "SDNCPDPInterface"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "100"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMIR19BYOL", { "Ref": "AWS::Region"}, "VMXHVM"]
+                },
+                "InstanceType": {
+                    "Ref": "SDNGatewayInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                        "NetworkInterfaceId": { "Ref": "Eth0SDNGateway" },
+                        "DeviceIndex": "0"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" },
+                        "DeviceIndex": "1"
+                    }
+                ],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["SDN_Gateway_AZUR_EKS", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                 "#junos-config\n",
+                                 "groups {\n",
+                                 "    global {\n",
+                                 "        system {\n",
+                                 "            host-name HOSTNAME;\n",
+                                 "            root-authentication {\n",
+                                 "                encrypted-password \"$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.\"; ## SECRET-DATA\n",
+                                 "            }\n",
+                                 "            login {\n",
+                                 "                user jnpr {\n",
+                                 "                    uid 2000;\n",
+                                 "                    class super-user;\n",
+                                 "                    authentication {\n",
+                                 "                        ssh-rsa \"SSHRSAKEY\";\n", 
+                                 "                        encrypted-password \"$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.\"; ## SECRET-DATA\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            services {\n",
+                                 "                ssh {\n",
+                                 "                    root-login deny-password;\n",
+                                 "                    max-sessions-per-connection 32;\n",
+                                 "                    client-alive-interval 120;\n",
+                                 "                }\n",
+                                 "                netconf {\n",
+                                 "                    ssh;\n",
+                                 "                    traceoptions {\n",
+                                 "                        file netconf-ops.log size 3m files 20 world-readable;\n",
+                                 "                        flag all;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            syslog {\n",
+                                 "                user * {\n",
+                                 "                    any emergency;\n",
+                                 "                }\n",
+                                 "                file messages {\n",
+                                 "                    any notice;\n",
+                                 "                    authorization info;\n",
+                                 "                }\n",
+                                 "                file interactive-commands {\n",
+                                 "                    interactive-commands any;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ntp {\n",
+                                 "                server 169.254.169.123;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        chassis {\n",
+                                 "            fpc 0 {\n",
+                                 "                pic 0 {\n",
+                                 "                    tunnel-services;\n",
+                                 "                }\n",
+                                 "                lite-mode;\n",
+                                 "            }\n",
+                                 "            network-services enhanced-ip;\n",
+                                 "        }\n",
+                                 "        interfaces {\n",
+                                 "            fxp0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayFXP0PublicIP" }, "/", { "Ref": "SDNGatewayFXP0PublicIPSN" }, ";\n", 
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            lo0 {\n",
+                                 "                unit 0;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route 0.0.0.0/0 {\n",
+                                 "                    next-hop GATEWAY;\n", 
+                                 "                    retain;\n",
+                                 "                    no-readvertise;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_basic__ {\n",
+                                 "        snmp {\n",
+                                 "            community public {\n",
+                                 "                authorization read-only;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        policy-options {\n",
+                                 "            policy-statement MAINTENANCE-MODE {\n",
+                                 "                term term1 {\n",
+                                 "                    from {\n",
+                                 "                        family evpn;\n",
+                                 "                        nlri-route-type [ 2 1 3 4 5 6 ];\n",
+                                 "                    }\n",
+                                 "                    then {\n",
+                                 "                        community add COM-MAINTENANCE;\n",
+                                 "                        accept;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "                term term100 {\n",
+                                 "                    then accept;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            policy-statement REJECT-MAINTENANCE-MODE {\n",
+                                 "                term term1 {\n",
+                                 "                    from {\n",
+                                 "                        family evpn;\n",
+                                 "                        community COM-MAINTENANCE;\n",
+                                 "                        nlri-route-type [ 2 1 3 4 5 6 ];\n",
+                                 "                    }\n",
+                                 "                    then reject;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            policy-statement MAINTENANCE-MODE-underlay {\n",
+                                 "                then {\n",
+                                 "                    as-path-prepend \"9999 9999 9999\";\n",
+                                 "                    accept;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            community COM-MAINTENANCE members 9999:9999;\n",
+                                 "        }\n",
+                                 "        protocols {\n",
+                                 "            l2-learning {\n",
+                                 "                global-mac-table-aging-time 1800;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_overlay_bgp__ {\n",
+                                 "        policy-options {\n",
+                                 "            policy-statement _contrail_ibgp_export_policy {\n",
+                                 "                term inet-vpn {\n",
+                                 "                    from family inet-vpn;\n",
+                                 "                    then {\n",
+                                 "                        next-hop self;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "                term inet6-vpn {\n",
+                                 "                    from family inet6-vpn;\n",
+                                 "                    then {\n",
+                                 "                        next-hop self;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            route-distinguisher-id ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "            dynamic-tunnels {\n",
+                                 "                _contrail_udp_tunnel {\n",
+                                 "                    source-address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    udp;\n",
+                                 "                    destination-networks {\n",
+                                 "                        ", { "Ref": "ContrailUnderlayNetwork" }, ";\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            resolution {\n",
+                                 "                rib bgp.rtarget.0 {\n",
+                                 "                    resolution-ribs inet.0;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            router-id ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "            autonomous-system ", { "Ref": "ContrailbgpASN" }, " loops 2;\n",
+                                 "        }\n",
+                                 "        protocols {\n",
+                                 "            bgp {\n",
+                                 "                group _contrail_asn-", { "Ref": "ContrailbgpASN" }, " {\n",
+                                 "                    type internal;\n",
+                                 "                    local-address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    hold-time 90;\n",
+                                 "                    family inet-vpn {\n",
+                                 "                        unicast;\n",
+                                 "                    }\n",
+                                 "                    family inet6-vpn {\n",
+                                 "                        unicast;\n",
+                                 "                    }\n",
+                                 "                    family evpn {\n",
+                                 "                        signaling;\n",
+                                 "                    }\n",
+                                 "                    family route-target;\n",
+                                 "                    export _contrail_ibgp_export_policy;\n",
+                                 "                    cluster ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    local-as ", { "Ref": "ContrailbgpASN" }, " loops 2;\n",
+                                 "                    multipath;\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP1" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP2" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP3" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    vpn-apply-export;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_overlay_networking__ {\n",
+                                 "        routing-instances {\n",
+                                 "            _contrail_net2-l3-7 {\n",
+                                 "                instance-type vrf;\n",
+                                 "                interface ge-0/0/2.0;\n",
+                                 "                route-distinguisher ", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt2" }, ";\n",
+                                 "                vrf-target target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt2" }, ";\n",
+                                 "                vrf-table-label;\n",
+                                 "            }\n",
+                                 "            _contrail_net1-l3-6 {\n",
+                                 "                instance-type vrf;\n",
+                                 "                interface ge-0/0/1.0;\n",
+                                 "                route-distinguisher ", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt1" }, ";\n",
+                                 "                vrf-target target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt1" }, ";\n",
+                                 "                vrf-table-label;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route ", { "Ref": "ContrailOverlayNetworks" }, " discard;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __interfaces__ {\n",
+                                 "        interfaces {\n",
+                                 "            ge-0/0/0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE000SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ge-0/0/1 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE001" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE001SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ge-0/0/2 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE002" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE002SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            lo0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address 127.0.0.1/32;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_policy__ {\n",
+                                 "        policy-options {\n",
+                                 "            prefix-list overlay {\n",
+                                 "                ", { "Ref": "ContrailOverlayNetworks" }, ";\n",
+                                 "            }\n",
+                                 "            community target_", { "Ref": "ContrailbgpASN" }, "_", { "Ref": "RouteTargetInt1" }, " members target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt1" }, ";\n",
+                                 "            community target_", { "Ref": "ContrailbgpASN" }, "_", { "Ref": "RouteTargetInt2" }, " members target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "RouteTargetInt2" }, ";\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route ", { "Ref": "ContrailUnderlayNetwork" }, " next-hop ", { "Ref": "SDNGatewayAZ1PrivateIPGE000AWSGW" }, ";\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "}\n",
+                                 "apply-groups [ global __contrail_basic__ __contrail_overlay_bgp__ __contrail_overlay_networking__ __interfaces__ __contrail_policy__ ];\n",
+                                 "#end of config\n"
+                        ]
+                    ]
+                }
+              }
+            }
+        },
+        "Eth0SDNGateway" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "fxp0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayFXP0PublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "idPublicSN" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "fxp0 Interface"}, {"Key" : "Interface", "Value" : "fxp0"} ]
+          }
+        },
+        "SDNCPDPInterface" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "ge000",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayAZ1PrivateIPGE000" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "idPrivateSN" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "cpdp Interface"}, {"Key" : "Interface", "Value" : "ge000"} ]
+            }
+        },
+        "IPAssociaton1": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "DependsOn": "SDNGatewayInstance",
+            "Properties": {
+                "NetworkInterfaceId" : { "Ref" : "Eth0SDNGateway" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "SDNGWFXP0PUBLICIP",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+    },
+    "Outputs": {
+        "SDNGatewayFXP0PublicIP": {
+            "Description": "SDN Gateway Public IP",
+            "Value": {
+                "Ref": "SDNGWFXP0PUBLICIP"
+            }
+        },
+        "SDNGatewayFXP0PrivateIP": {
+            "Description": "SDN Gateway FXP0 private (internal) IP",
+            "Value": {
+                "Ref": "SDNGatewayFXP0PublicIP"
+            }
+        },
+        "SDNGatewayAZ1PrivateIPGE000": {
+            "Description": "SDN Gateway WAN IP used by Contrail for control plane and data plane traffic",
+            "Value": {
+                "Ref": "SDNGatewayAZ1PrivateIPGE000"
+            }
+        },
+        "SSHtoSDNGateway": {
+            "Description": "SSH to vMX FXP0 command",
+            "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] jnpr@", {"Ref": "SDNGWFXP0PUBLICIP"}, "" ] ] }
+        },
+        "Hints": {
+            "Description": "The first time you use the vMX your stack will fail. In the cloudformation stack events you will be prompted with a copy paste link, to accept the terms and conditions for the AMI",
+            "Value": NA 
+        }
+    }
+}

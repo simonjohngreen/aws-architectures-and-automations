@@ -1,0 +1,133 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Peers two VPC's and lets the private subnets route to each other",
+    "Parameters": {
+        "VPC1ID": {
+            "Description": "Contrail Controller VPC ID",
+            "Type": "String",
+        },
+        "VPCCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the Minion VPC",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "VPC1PrivateSubnetRouteTableIDAZ1a": {
+            "Description": "ID of Controller VPC Private Route Table 1",
+            "Type": "String",
+        },
+        "VPC1PrivateSubnetRouteTableIDAZ1b": {
+            "Description": "ID of Controller VPC Private Route Table 2",
+            "Type": "String",
+        },
+        "VPC1PrivateSubnetRouteTableIDAZ1c": {
+            "Description": "ID of Controller VPC Private Route Table 3",
+            "Type": "String",
+        },
+        "VPC2ID": {
+            "Description": "Minion VPC ID",
+            "Type": "String",
+        },
+        "VPCCIDR2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the Contrail controller VPC",
+            "Default": "100.73.100.0/23",
+            "Type": "String"
+        },
+        "VPC2PrivateSubnetRouteTableIDAZ1a": {
+            "Description": "ID of Minion VPC Private Route Table 1",
+            "Type": "String",
+        },
+        "VPC2PrivateSubnetRouteTableIDAZ1b": {
+            "Description": "ID of Minion VPC Private Route Table 2",
+            "Type": "String",
+        },
+        "VPC2PrivateSubnetRouteTableIDAZ1c": {
+            "Description": "ID of Minion VPC Private Route Table 3",
+            "Type": "String",
+        },
+    },
+    "Resources": {
+         "VPCPeeringConnectionVPC1ToVPC2": {
+              "Type": "AWS::EC2::VPCPeeringConnection",
+              "Properties": {
+                  "VpcId": {"Ref": "VPC1ID"},
+                  "PeerVpcId": {"Ref": "VPC2ID"},
+                  "Tags": [
+                      {
+                          "Key": "Name",
+                          "Value": "VCP peering connection from the Contrail Controller VPC to the Minion VPC"
+                      },
+                      {
+                          "Key": "CloudFormationStack",
+                          "Value": {
+                              "Ref": "AWS::StackId"
+                          }
+                      }
+                  ]
+              }
+         },
+         "PeeringRouteFromVPC1PrivateToVPC2Private1": {
+             "Type": "AWS::EC2::Route",
+             "Properties": {
+                 "DestinationCidrBlock": {"Ref": "VPCCIDR2"},
+                 "RouteTableId": {"Ref": "VPC1PrivateSubnetRouteTableIDAZ1a"},
+                 "VpcPeeringConnectionId": {
+                     "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                 }
+             }
+         },
+         "PeeringRouteFromVPC1PrivateToVPC2Private2": {
+             "Type": "AWS::EC2::Route",
+             "Properties": {
+                 "DestinationCidrBlock": {"Ref": "VPCCIDR2"},
+                 "RouteTableId": {"Ref": "VPC1PrivateSubnetRouteTableIDAZ1b"},
+                 "VpcPeeringConnectionId": {
+                     "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                 }
+             }
+         },
+         "PeeringRouteFromVPC1PrivateToVPC2Private3": {
+             "Type": "AWS::EC2::Route",
+             "Properties": {
+                 "DestinationCidrBlock": {"Ref": "VPCCIDR2"},
+                 "RouteTableId": {"Ref": "VPC1PrivateSubnetRouteTableIDAZ1c"},
+                 "VpcPeeringConnectionId": {
+                     "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                 }
+             }
+         },
+         "PeeringRouteFromVPC2PrivateToVPC1Private1": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "DestinationCidrBlock": {"Ref": "VPCCIDR1"},
+                "RouteTableId": {"Ref": "VPC2PrivateSubnetRouteTableIDAZ1a"},
+                "VpcPeeringConnectionId": {
+                    "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                }
+             }
+         },
+         "PeeringRouteFromVPC2PrivateToVPC1Private2": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "DestinationCidrBlock": {"Ref": "VPCCIDR1"},
+                "RouteTableId": {"Ref": "VPC2PrivateSubnetRouteTableIDAZ1b"},
+                "VpcPeeringConnectionId": {
+                    "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                }
+             }
+         },
+         "PeeringRouteFromVPC2PrivateToVPC1Private3": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "DestinationCidrBlock": {"Ref": "VPCCIDR1"},
+                "RouteTableId": {"Ref": "VPC2PrivateSubnetRouteTableIDAZ1c"},
+                "VpcPeeringConnectionId": {
+                    "Ref": "VPCPeeringConnectionVPC1ToVPC2"
+                }
+             }
+         }
+     }
+}

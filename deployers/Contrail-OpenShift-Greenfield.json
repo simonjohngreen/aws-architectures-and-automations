@@ -1,0 +1,2394 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploys Contrail Command and an OpenShift Master, an Infra running Contrail SDN Controller, three Computes into three regions of a private VPC",
+    "Parameters": {
+        "AvailabilityZone1": {
+            "Description": "AWS Availability Zone One",
+            "Type": "String",
+            "Default": "eu-west-1a"
+        },
+        "AvailabilityZone2": {
+            "Description": "AWS Availability Zone Two",
+            "Type": "String",
+            "Default": "eu-west-1b"
+        },
+        "AvailabilityZone3": {
+            "Description": "AWS Availability Zone Three",
+            "Type": "String",
+            "Default": "eu-west-1c"
+        },
+        "CommandInstanceType": {
+            "Description": "Contrail Command Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "InfraInstanceType": {
+            "Description": "OpenShift Infra Instance Type. m5 or c5, as it needs to run on an aws nitro system hypervisor to avoid issues with networkmanager and system restarts after a reboot",
+            "Type": "String",
+            "Default": "m5.2xlarge"
+        },
+        "MasterInstanceType": {
+            "Description": "OpenShift Infra Instance Type. m5 or c5, as it needs to run on an aws nitro system hypervisor to avoid issues with networkmanager and system restarts after a reboot",
+            "Type": "String",
+            "Default": "m5.2xlarge"
+        },
+        "NodeInstanceType": {
+            "Description": "OpenShift Node Instance Type. m5 or c5, as it needs to run on an aws nitro system hypervisor to avoid issues with networkmanager and system restarts after a reboot",
+            "Type": "String",
+            "Default": "m5.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "ContrailKey"
+        },
+        "ContainerRegistryTag": {
+            "Description": "Container Registry Tag",
+            "Type": "String",
+            "Default": "2005.62-rhel"
+        },
+        "ContainerRegistryVersion": {
+            "Description": "Container Registry Tag",
+            "Type": "String",
+            "Default": "2005"
+        },
+        "ContainerRegistryUserName": {
+            "Description": "Container Registry User Name",
+            "Type": "String"
+        },
+        "ContainerRegistryPassword": {
+            "Description": "Container Registry User Password",
+            "Type": "String",
+            "NoEcho": true
+        },
+        "VPCCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire management control VPC.",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "PublicSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet",
+            "Default": "100.72.100.192/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ1",
+            "Default": "100.72.100.0/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1GatewayIP": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "ConstraintDescription": "parameter must be in the form x.x.x.x",
+            "Description": "Gateway IP used by contrail command to nat to the controllers in AZ2 AZ3",
+            "Default": "100.72.100.1",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ2",
+            "Default": "100.72.100.64/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR3": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ3",
+            "Default": "100.72.100.128/26",
+            "Type": "String"
+        },
+        "DeployContrailCommand": {
+            "Description": "if true we will deploy contrail command",
+            "Type": "String",
+            "Default": "true"
+        },
+        "DeployHighlyAvailable": {
+            "Description": "note completed yet, if true we will deploy the masters and infras in HA",
+            "Type": "String",
+            "Default": "false"
+        },
+        "ContrailCommandAZ1PublicIP": {
+            "Description": "AZ1 Command public static IP",
+            "Type": "String",
+            "Default": "100.72.100.203"
+        },
+        "ContrailCommandAZ1PrivateIP": {
+            "Description": "AZ1 Command private static IP",
+            "Type": "String",
+            "Default": "100.72.100.10"
+        },
+        "OpenShiftInfraAZ1PrivateIP": {
+            "Description": "AZ1 OpenShift Infra private static IP",
+            "Type": "String",
+            "Default": "100.72.100.11"
+        },
+        "OpenShiftInfraAZ2PrivateIP": {
+            "Description": "AZ2 OpenShift Infra private static IP",
+            "Type": "String",
+            "Default": "100.72.100.74"
+        },
+        "OpenShiftInfraAZ3PrivateIP": {
+            "Description": "AZ3 OpenShift Infra private static IP",
+            "Type": "String",
+            "Default": "100.72.100.138"
+        },
+        "OpenShiftMasterAZ1PrivateIP": {
+            "Description": "AZ1 OpenShift Master private static IP",
+            "Type": "String",
+            "Default": "100.72.100.12"
+        },
+        "OpenShiftMasterAZ2PrivateIP": {
+            "Description": "AZ2 OpenShift Master private static IP",
+            "Type": "String",
+            "Default": "100.72.100.75"
+        },
+        "OpenShiftMasterAZ3PrivateIP": {
+            "Description": "AZ3 OpenShift Master private static IP",
+            "Type": "String",
+            "Default": "100.72.100.139"
+        },
+        "OpenShiftNodeAZ1PrivateIP": {
+            "Description": "AZ1 OpenShift Node private static IP",
+            "Type": "String",
+            "Default": "100.72.100.13"
+        },
+        "OpenShiftNodeAZ2PrivateIP": {
+            "Description": "AZ2 OpenShift Node private static IP",
+            "Type": "String",
+            "Default": "100.72.100.76"
+        },
+        "OpenShiftNodeAZ3PrivateIP": {
+            "Description": "AZ3 OpenShift Node private static IP",
+            "Type": "String",
+            "Default": "100.72.100.140"
+        },
+        "UserLocation": {
+            "Description": "The IP address range that can be used for OAM access to CC and if running HA the load balancer, both on internet. Typically your laptop /32. If left blank we will add 0.0.0./0 and allow ssh from anywhere",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "0.0.0.0/0",
+            "ConstraintDescription": "Put your Client IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "SGSubnet1": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "100.73.100.0/23"
+        },
+        "SGSubnet2": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+            "Type": "String"
+        },
+        "SGSubnet3": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+            "Type": "String"
+        },
+        "SGSubnet4": {
+            "Description": "AN IP address range allowed in security to point towards the controller cluster. Minion subnet for example. Leave it blank if you do not want it populated",
+            "Type": "String"
+        },
+        "SiteName": {
+            "Description": "Site Name",
+            "Type": "String",
+            "Default": "OpenShiftContrail"
+        },
+        "VPCDOMAIN": {
+            "Description": "VCP domain type",
+            "Type": "String",
+            "Default": "default"
+        },
+        "SSHPassword": {
+            "Description": "SSH Password",
+            "Type": "String",
+            "Default": "EfrtGF5EDF_d54ERrf",
+            "NoEcho": true
+        },
+        "ContrailPassword": {
+            "Description": "Contrail Command Password",
+            "Type": "String",
+            "NoEcho": "True",
+            "Default": "contrail123"
+        },
+        "RedHatAccountUserName": {
+            "Description": "RedHat Account User Name",
+            "Type": "String"
+        },
+        "RedHatAccountPassword": {
+            "Description": "RedHat Account Password",
+            "Type": "String",
+            "NoEcho": true
+        },
+        "RedHatSubscriptionPoolID": {
+            "Description": "RedHat SubPool ID",
+            "Type": "String",
+            "NoEcho": "True"
+        },
+        "OpenShiftAppDNSSubDomain": {
+            "Description": "RedHat OpenShift Domain to use for apps exposed to the router pod",
+            "Type": "String",
+            "Default": "router.default.svc.cluster.local"
+        },
+
+        "PodIPAM": {
+            "Description": "The IPAM subnet range to use for the PODs. This is used by all namespaces so it typicaly very large, a /12 for example",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "10.128.0.0/14"
+        },
+        "ServiceIPAM": {
+            "Description": "The IPAM subnet range to use for the Services. This is used by all namespaces so it typicaly very large, a /12 for example",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "172.30.0.0/16"
+        },
+        "InstallerAGITRepoOrS3": {
+            "Description": "Fetch the ansible installer from S3 (the default) or github",
+            "Type": "String",
+            "Default": "S3",
+            "AllowedValues" : ["S3", "Github"]
+        },
+        "InstallerBGitHubInstallerLocation": {
+            "Description": "The location  to use if Github is selected",
+            "Type": "String",
+            "Default": "https://github.com/Juniper/openshift-ansible.git -b release-3.11-contrail"
+        },
+        "InstallerCS3Location": {
+            "Description": "The location  to use if Github is selected",
+            "Type": "String",
+            "Default": "https://s3-eu-central-1.amazonaws.com/contrail-one-click-deployers/contrail-openshift-deployer-2005.61-patch1-health-checks-patch2-dupip.tgz"
+         },
+        "NodeMTU": {
+            "Description": "MTU for the OpenShift Nodes. Usefull for VPN gateways, which might need a sub 1500 MTU",
+            "Type": "String",
+            "Default": "9001"
+         }
+    },
+    "Mappings": {
+        "AWSRegionArch2AMI": {
+            "eu-central-1": { "RHEL76HVM": "ami-062dacb006c5860f9" },
+            "ap-southeast-2": { "RHEL76HVM": "ami-0f1ef883e90ca71c0" },
+            "eu-west-1": { "RHEL76HVM": "ami-0a0d2dc2f521ddce6" },
+            "us-east-1": { "RHEL76HVM": "ami-0916c408cb02e310b" },
+            "us-east-2": { "RHEL76HVM": "ami-03cfe750d5ea278f5" },
+            "us-west-2": { "RHEL76HVM": "ami-04b7963c90686dd4c" },
+            "ap-northeast-1": { "RHEL76HVM": "ami-0dc41c7805e171046" },
+            "eu-west-2": { "RHEL76HVM": "ami-096fbd31de0375d2a" },
+            "eu-west-3": { "RHEL76HVM": "ami-025fb013ee01513b5" },
+            "ap-southeast-1": { "RHEL76HVM": "ami-07cafca3788493264" },
+            "eu-north-1": { "RHEL76HVM": "ami-75941f0b" },
+            "ap-south-1": { "RHEL76HVM": "ami-021912f2c8d2c70c9" },
+            "ap-northeast-2": { "RHEL76HVM": "ami-0b5425629eb18a008" },
+            "sa-east-1": { "RHEL76HVM": "ami-048b2348ac2ccfc53" }
+        }
+    },
+    "Conditions": {
+        "HasDeployContrailCommand": { "Fn::Equals": [{ "Ref": "DeployContrailCommand" }, "true"] },
+        "HasDeployHighlyAvailable": { "Fn::Equals": [{ "Ref": "DeployHighlyAvailable" }, "true"] },
+        "HasSGSubnet1": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet1" }, ""] }] },
+        "HasSGSubnet2": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet2" }, ""] }] },
+        "HasSGSubnet3": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet3" }, ""] }] },
+        "HasSGSubnet4": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet4" }, ""] }] },
+        "HasSGSubnet1andHA": { "Fn::And": [{ "Condition": "HasSGSubnet1" }, { "Condition": "HasDeployHighlyAvailable" }] },
+        "HasSGSubnet2andHA": { "Fn::And": [{ "Condition": "HasSGSubnet2" }, { "Condition": "HasDeployHighlyAvailable" }] },
+        "HasSGSubnet3andHA": { "Fn::And": [{ "Condition": "HasSGSubnet3" }, { "Condition": "HasDeployHighlyAvailable" }] },
+        "HasSGSubnet4andHA": { "Fn::And": [{ "Condition": "HasSGSubnet4" }, { "Condition": "HasDeployHighlyAvailable" }] }
+    },
+    "Resources": {
+        "VPC1": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR1"
+                },
+                "InstanceTenancy": { "Ref": "VPCDOMAIN" },
+                "EnableDnsHostnames": "True",
+                "EnableDnsSupport": "True",
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail", { "Ref": "SiteName" }]] }
+                }]
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR1"
+                },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailPublicSN1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "PrivateSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR1"
+                },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailPrivateSN1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "PrivateSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone2" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR2"
+                },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailPrivateSN2", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                }]
+            }
+        },
+        "PrivateSubnet3": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone3" },
+                "VpcId": { "Ref": "VPC1" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR3"
+                },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailPrivateSN3", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                }]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailInternetGW1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailNATGW1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "PrivateSubnetRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": { "Fn::Join": [".", ["ControllerPrivateRouteTable1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable2": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": { "Fn::Join": [".", ["ControllerPrivateRouteTable2", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute2": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable2"
+                }
+            }
+        },
+        "PrivateSubnetRouteTable3": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [{
+                        "Key": "Name",
+                        "Value": { "Fn::Join": [".", ["ControllerPrivateRouteTable3", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute3": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation3": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet3"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable3"
+                }
+            }
+        },
+        "PublicRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["ContrailPubicSubnetRouteTable1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "PublicRoute1": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                }
+            }
+        },
+        "IPAddress1": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SecurityGroupContrailCommand": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Condition": "HasDeployContrailCommand",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "Security group for Contrail Comand, public and on internet",
+                "GroupName": { "Fn::Join": [".", ["Contrail_Command_public_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "tcp",
+                        "FromPort": 9090,
+                        "ToPort": 9090,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the Contrail Comand UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 9091,
+                        "ToPort": 9091,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the Contrail Comand API"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8143,
+                        "ToPort": 8143,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ1 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8081,
+                        "ToPort": 8081,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the Contrail Infra 1 Analytics API"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8082,
+                        "ToPort": 8082,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the Contrail Infra 1 Controller API"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8144,
+                        "ToPort": 8144,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ2 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8145,
+                        "ToPort": 8145,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ3 Contrail UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8443,
+                        "ToPort": 8443,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ1 OpenShift UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8444,
+                        "ToPort": 8444,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ2 OpenShift UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8445,
+                        "ToPort": 8445,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the AZ3 OpenShift UI"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1139,
+                        "ToPort": 1139,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow Infra AZ1 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1140,
+                        "ToPort": 1140,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow Master AZ1 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1141,
+                        "ToPort": 1141,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow AZ1 Node NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1142,
+                        "ToPort": 1142,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow AZ2 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 1143,
+                        "ToPort": 1143,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow AZ3 NAT Access"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2138,
+                        "ToPort": 2138,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3138,
+                        "ToPort": 3138,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 2140,
+                        "ToPort": 2140,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3140,
+                        "ToPort": 3140,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the OpenShift apps via port 80 on the infra node"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 443,
+                        "ToPort": 443,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow access to the OpenShift apps via port 443 on the infra node"
+                    },
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": { "Ref": "VPCCIDR1" },
+                        "Description": "allow access to the Contrail Instances within the VPC"
+                    }
+                ],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Command_Security_Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "SecurityGroupContrailAZ1": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ1 Security group for Contrail Instances on the Private SN",
+                "GroupName": { "Fn::Join": [".", ["Contrail_Private_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": { "Ref": "VPCCIDR1" },
+                    "Description": "allow access to the Contrail Instances within the VPC"
+                }],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Instance_Private_Security_Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "SgEntry01AZ1": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ1" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+            }
+        },
+        "SgEntry02AZ1": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ1" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+            }
+        },
+        "SgEntry03AZ1": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ1" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+            }
+        },
+        "SgEntry04AZ1": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ1" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+            }
+        },
+        "SecurityGroupContrailAZ2": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ2 Security group for Contrail Instances on the Private SN",
+                "GroupName": { "Fn::Join": [".", ["Contrail_Private_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] },
+                "SecurityGroupIngress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": { "Ref": "VPCCIDR1" },
+                    "Description": "allow access to the Contrail Instances within the VPC"
+                }],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail Instance Private Security Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                }]
+            }
+        },
+        "SgEntry01AZ2": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ2" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+            }
+        },
+        "SgEntry02AZ2": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ2" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+            }
+        },
+        "SgEntry03AZ2": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ2" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+            }
+        },
+        "SgEntry04AZ2": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ2" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+            }
+        },
+        "SecurityGroupContrailAZ3": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "VPC1" },
+                "GroupDescription": "AZ3 Security group for Contrail Instances on the Private SN",
+                "GroupName": { "Fn::Join": [".", ["Contrail_Private_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] },
+                "SecurityGroupIngress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": { "Ref": "VPCCIDR1" },
+                    "Description": "allow access to the Contrail Instances within the VPC"
+                }],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail Instance Private Security Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                }]
+            }
+        },
+        "SgEntry01AZ3": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ3" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet1"
+            }
+        },
+        "SgEntry02AZ3": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ3" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet2"
+            }
+        },
+        "SgEntry03AZ3": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ3" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet3"
+            }
+        },
+        "SgEntry04AZ3": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4andHA",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupContrailAZ3" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the controllers from a specified subnet subnet4"
+            }
+        },
+        "SGIngressSecurityGroupContrailAZ1": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupContrailAZ1"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupContrailAZ1"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "SGIngressSecurityGroupContrailAZ2": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupContrailAZ2"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupContrailAZ2"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "SGIngressSecurityGroupContrailAZ3": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupContrailAZ3"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupContrailAZ3"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "SGIngressSecurityGroupContrailCommand": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasDeployContrailCommand",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupContrailCommand"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupContrailCommand"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "ContrailCommandInstance": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployContrailCommand",
+            "DependsOn": ["IPAddress1", "PrivateSubnet1", "Eth0Command", "Eth1Command"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "100"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "CommandInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                        "NetworkInterfaceId": { "Ref": "Eth0Command" },
+                        "DeviceIndex": "0"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "Eth1Command" },
+                        "DeviceIndex": "1"
+                    }
+                ],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Command_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo \"net.ipv4.ip_forward = 1\" >> /etc/sysctl.conf\n",
+                                "/sbin/sysctl -w net.ipv4.ip_forward=1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "yum install -y iptables-services\n",
+                                "systemctl start iptables\n",
+                                "systemctl enable iptables\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 1139 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":22\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 22 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 22 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 1140 -j DNAT --to-destination ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, ":22\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, " --dport 22 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, " --dport 22 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 1141 -j DNAT --to-destination ", { "Ref": "OpenShiftNodeAZ1PrivateIP" }, ":22\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftNodeAZ1PrivateIP" }, " --dport 22 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftNodeAZ1PrivateIP" }, " --dport 22 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 1142 -j DNAT --to-destination ", { "Ref": "OpenShiftNodeAZ2PrivateIP" }, ":22\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftNodeAZ2PrivateIP" }, " --dport 22 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftNodeAZ2PrivateIP" }, " --dport 22 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 1143 -j DNAT --to-destination ", { "Ref": "OpenShiftNodeAZ3PrivateIP" }, ":22\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftNodeAZ3PrivateIP" }, " --dport 22 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftNodeAZ3PrivateIP" }, " --dport 22 -j ACCEPT\n",
+                                "iptables -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8143 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":8143\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8143 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8143 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8081 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":8081\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8081 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8081 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8082 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":8082\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8082 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 8082 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 80 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":80\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 80 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 80 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 443 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, ":443\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 443 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ1PrivateIP" }, " --dport 443 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8144 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ2PrivateIP" }, ":8143\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ2PrivateIP" }, " --dport 8144 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ2PrivateIP" }, " --dport 8144 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8145 -j DNAT --to-destination ", { "Ref": "OpenShiftInfraAZ3PrivateIP" }, ":8143\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftInfraAZ3PrivateIP" }, " --dport 8144 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftInfraAZ3PrivateIP" }, " --dport 8144 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8443 -j DNAT --to-destination ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, ":8443\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, " --dport 8443 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftMasterAZ1PrivateIP" }, " --dport 8443 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8444 -j DNAT --to-destination ", { "Ref": "OpenShiftMasterAZ2PrivateIP" }, ":8443\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftMasterAZ2PrivateIP" }, " --dport 8444 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftMasterAZ2PrivateIP" }, " --dport 8444 -j ACCEPT\n",
+                                "iptables -t nat -I PREROUTING -p tcp -d ", { "Ref": "ContrailCommandAZ1PublicIP" }, " --dport 8445 -j DNAT --to-destination ", { "Ref": "OpenShiftMasterAZ3PrivateIP" }, ":8443\n",
+                                "iptables -t nat -I POSTROUTING -p tcp -d ", { "Ref": "OpenShiftMasterAZ3PrivateIP" }, " --dport 8445 -j SNAT --to-source ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\n",
+                                "iptables -I FORWARD -p tcp -d ", { "Ref": "OpenShiftMasterAZ3PrivateIP" }, " --dport 8445 -j ACCEPT\n",
+                                "iptables -I INPUT -p tcp -m tcp --dport 9091 -j ACCEPT\n",
+                                "yum remove -y chrony\n",
+                                "yum install -y yum-utils device-mapper-persistent-data lvm2 ntp\n",
+                                "echo \"\nserver 169.254.169.123 prefer iburst minpoll 4 maxpoll 4\" | tee --append /etc/ntp.conf\n",
+                                "echo \"\nserver 0.pool.ntp.org iburst\" | tee --append /etc/ntp.conf\n",
+                                "systemctl start ntpd\n",
+                                "systemctl enable ntpd\n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=rhel-7-server-rpms --enable=rhel-7-server-extras-rpms --enable=rhel-7-server-optional-rpms\n",
+                                "yum install -y docker device-mapper-libs device-mapper-event-libs\n",
+                                "systemctl start docker\n",
+                                "systemctl status docker\n",
+                                "systemctl enable docker\n",
+                                "docker login hub.juniper.net --username ", { "Ref": "ContainerRegistryUserName" }, " --password ", { "Ref": "ContainerRegistryPassword" }, "\n",
+                                "docker pull hub.juniper.net/contrail/contrail-command-deployer:", { "Ref": "ContainerRegistryTag" }, "\n",
+                                "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                                "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"GATEWAYDEV=eth0\" >> /etc/sysconfig/network\n",
+                                "echo \"network:\" >> /etc/cloud/cloud.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg\n",
+                                "echo \"BOOTPROTO=dhcp\" | tee /etc/sysconfig/network-scripts/ifcfg-eth1\n",
+                                "echo \"DEVICE=eth1\" | tee --append /etc/sysconfig/network-scripts/ifcfg-eth1\n",
+                                "echo \"ONBOOT=yes\" | tee --append /etc/sysconfig/network-scripts/ifcfg-eth1\n",
+                                "echo \"TYPE=Ethernet\" | tee --append /etc/sysconfig/network-scripts/ifcfg-eth1\n",
+                                "echo \"USERCTL=no\" | tee --append /etc/sysconfig/network-scripts/ifcfg-eth1\n",
+                                "rm -f /var/run/dhclient*\n",
+                                "echo \"", { "Ref": "PrivateSubnetCIDR2" }, " via ", { "Ref": "PrivateSubnetCIDR1GatewayIP" }, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-eth1\n",
+                                "echo \"", { "Ref": "PrivateSubnetCIDR3" }, " via ", { "Ref": "PrivateSubnetCIDR1GatewayIP" }, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-eth1\n",
+                                "echo \"", { "Ref": "SGSubnet1" }, " via ", { "Ref": "PrivateSubnetCIDR1GatewayIP" }, " dev ens4\" | tee --append /etc/sysconfig/network-scripts/route-eth1\n",
+                                "systemctl restart network.service\n",
+                                "echo \"command_servers:\" | tee /tmp/command_servers.yml\n",
+                                "echo \"    server1:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        ip: ", { "Ref": "ContrailCommandAZ1PrivateIP" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        connection: ssh\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        ssh_user: root\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        ssh_pass: ", { "Ref": "SSHPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        sudo_pass: ", { "Ref": "SSHPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        ntpserver: 169.254.169.123\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        registry_insecure: false\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        container_registry: hub.juniper.net/contrail\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        container_tag: ", { "Ref": "ContainerRegistryTag" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        container_registry_username: ", { "Ref": "ContainerRegistryUserName" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        container_registry_password: ", { "Ref": "ContainerRegistryPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        config_dir: /etc/contrail\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"        contrail_config:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            database:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              type: postgres\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              dialect: postgres\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              host: localhost\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              user: root\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              password: ", { "Ref": "ContrailPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              name: contrail_test\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              max_open_conn: 100\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              connection_retries: 10\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              retry_period: 3s\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            cache:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                timeout: 10s\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                max_history: 100000\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                rdbms:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            server:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                read_timeout: 10\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                write_timeout: 5\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                log_api: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                address: :9091\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                tls:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  key_file: /usr/share/contrail/ssl/cs-key.pem\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  cert_file: /usr/share/contrail/ssl/cs-cert.pem\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                enable_grpc: false\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                static_files:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  /: /usr/share/contrail/public\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                notify_etcd: false\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                enable_vnc_replication: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            keystone:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                local: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                assignment:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  type: static\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  data:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                     domains:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                        default: &default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          id: default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          name: default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                     projects:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                        admin: &admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                        demo: &demo\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          id: demo\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          name: demo\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                     users:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                        admin:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          id: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          name: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          domain: *default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          password: ", { "Ref": "ContrailPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          email: sgreen@juniper.net\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          roles:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                          - id: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                            name: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                            project: *admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                store:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  type: memory\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  expire: 36000\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                  authurl: https://localhost:9091/keystone/v3\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            insecure: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            auth_type: basic-auth\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            etcd:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                endpoints:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                 - localhost:2379\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                username: \" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                password: \" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                path: contrail\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            watcher:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                enabled: false\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"                storage: json\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            client:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              id: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              password: ", { "Ref": "ContrailPassword" }, "\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              project_name: admin\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              domain_id: default\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              schema_root: /\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              endpoint: https://localhost:9091\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"            agent:\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              enabled: true\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              backend: file\" | tee --append /tmp/command_servers.yml\n",
+                                "echo \"              log_level: debug\" | tee --append /tmp/command_servers.yml\n",
+                                "docker run -td --net host -v /tmp/command_servers.yml:/command_servers.yml --privileged --name contrail_command_deployer hub.juniper.net/contrail/contrail-command-deployer:", { "Ref": "ContainerRegistryTag" }, "\n",
+                                "systemctl enable iptables\n",
+                                "systemctl start iptables\n",
+                                "service iptables save\n",
+                                "echo \"all done, ansible will take a few minutes to complete, then connect to the Contrail Command UI on https://",
+                                { "Ref": "IPAddress1" },
+                                ":9091\"\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0Command": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployContrailCommand",
+            "Properties": {
+                "Description": "eth0",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailCommand" }],
+                "PrivateIpAddress": { "Ref": "ContrailCommandAZ1PublicIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PublicSubnet1" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "Eth1Command": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployContrailCommand",
+            "Properties": {
+                "Description": "eth1",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailCommand" }],
+                "PrivateIpAddress": { "Ref": "ContrailCommandAZ1PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet1" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 1" }, { "Key": "Interface", "Value": "eth1" }]
+            }
+        },
+        "OpenShiftInfraInstanceAZ1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["PrivateSubnet1", "Eth0InfraAZ1"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0InfraAZ1" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Infra_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/id_rsa.pub\n",
+                                "echo -e \"-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu42GJ4sfwlJ9rtetaqDfyZr/S56+RPfzHT+KQc142H6lVPYu\n8B89p0p3zE1mkQ7r9X8OGpK7MA3u0Nn97y5zo6udAJXIGoH50wzUAjYIPEup0bwk\nPU8ZBlB2Sy2dive853w1LoNiywgvbKK/edyEDqWRYh9rBPZt2TI0QSYEiHRjQclZ\nGPYbtLqaGQTmOYzwtuMwpcF7B/NTc/Rg03HgmmmuV/O1tzw2Dh5/X8ro2sZepV5H\nLHI76AnUFPE2FgsWO3djHkvU6c1UCIciRp7SAGdYBkpCC/9MVv6SFT+27YxWk6zu\n7mwtrGwf0cBIyVmwXXHtTWf8o+0Bul/IV3xinwIDAQABAoIBAF2Q6ieaIZr5Olha\noto6LcrPN6PLKxMPO8sQovHXBv3CmMq9EoeanlByNzfGOXAOqKrN2wRoxVfg645n\n4mZLn0c821OqZazLwQ2ILdB4kj06ZhsLKG0po8thotI4jIsCsswtS/7LbyLpD3e7\n7Zhm6b7A3Lm+AM71/bFIeYcy5zoHMnDbNmNKdyMn4WWyqrbcdC21T9psRGXiRIE+\n5sIOI1pU9fz0yzO9nFXGjidyhNqbAFDFoDHmazs7OMiY97GphyiUlh8hj/Mwrjzg\n8Uk8yLw8sMH41mm/eoWlp9VaRqZgUK+lgakxCHuk1hAsrJnSW5NnCOHRjFCe5OAY\nMY4zdNECgYEA9MBK/Gc/3utvDXSVusIUBkedlmzWcKDkQdzgNQB1Y59AN2jwt6oP\nFwEVGgR4TDm2BPy+pxoEqTHNIh/5gTVIgp3O6uX8zDSRNclqYnIehtimZR3jetRS\nzuGZbO9603KakRTJRGh04Ggy5yDvBHRK7OyotLXoyCNebcJZbMB6JskCgYEAxCw+\nb7+Sb4L7adVs+2UAC2vCnmXUadsx+LfeDvSb3xAoz+vtq5MR21mnT47irC+v+tsC\neoP1F7zNiIez454oJebeu8Nk/REXPlxPCi6LgZrDsHsxTfNXvJUk5Yt6rSanxSrH\nT7zLLsF4AxY5oEyD+X4Xlrd4lHTxiWoHPMqnqicCgYBf6he40HGcV6FeoYin9rTI\nPTqJn79txe+NzBRlUPewAdG1pT9oipF9T2RInOXT4W3uiGnirHSVJbohHGy38Pyo\ni1VygozOLe+WJ4e0asqBx9d1mv/xu9Fz1787jKISyT+/iWjSkSj0ZIFGSIbCtRxD\nuv7mSr+d5xZzZw2Ka+ey2QKBgF5lq+W6GYzvSmuy965A+7SDNjNibMRDZdh5IbGw\noxDDheAHd2aIbp9OlOQDra+NgvEDUj4CIX46q+x24Gk3Qbp7TdKsQ3xDLRwk7yPH\nIfpLrr7NiPwpjJ6CZi7O30lSwIhv/VixUFQ/ZLCXkUNBjoAP3On5f1xwqYmmK7Vl\nDykhAoGBALPivmGopBZhADOiJj7pIIeVB31uXnzCog3SfSvS4bVeRdLsyRct6vnI\n94wexgUA7CfWgQqqdgARSAe2JL5C9FEQKwa6lPfoi9Ft6NrO5UX7oqDgEVinQZzZ\nnYfyuaPvdQoBO5LE14jHfKTws+/vbgc0u7zONkOwpiHHLIhfJocA\n-----END RSA PRIVATE KEY-----\" | tee --append /root/.ssh/id_rsa\n",
+                                "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                                "#the following patchs fix memmory and  resource warnings as cassandra comes up\n",
+                                "echo  \"vm.max_map_count=1048575\" >> /etc/sysctl.conf\n",
+                                "sysctl -p\n",
+                                "sed -i \"/KillMode=process/ a LimitMEMLOCK=infinity\" /lib/systemd/system/docker.service\n",
+                                "systemctl daemon-reload\n",
+                                "cd /root\n",
+                                "if [ ", { "Ref": "InstallerAGITRepoOrS3" }, " == S3 ] ; then\n",
+                                "    echo \"Grabbing Ansible Installer from S3\"\n",
+                                "    wget ", { "Ref": "InstallerCS3Location" }, " -O contrail-openshift-deployer.tgz\n",
+                                "    #need --no-same-owner here else /root permissions get changed and ansible ssh to self fails \n",
+                                "    tar zxvf contrail-openshift-deployer.tgz \n",
+                                "else\n",
+                                "    echo \"Grabbing Ansible Installer from Github\"\n",
+                                "    git clone ", { "Ref": "InstallerBGitHubInstallerLocation" }, "\n",
+                                "fi\n",
+                                "cd /root/openshift-ansible\n",
+                                "cat > inventory/ose-install << EOF \n",
+                                "[OSEv3:vars]\n",
+                                "### Ansible Vars\n",
+                                "timeout=60\n",
+                                "### OpenShift Basic Vars\n",
+                                "openshift_deployment_type=openshift-enterprise\n",
+                                "deployment_type=openshift-enterprise\n",
+                                "containerized=false\n",
+                                "openshift_disable_check=memory_availability,package_availability,disk_availability,package_version,docker_storage,docker_image_availability\n",
+                                "# Default node selectors\n",
+                                "openshift_hosted_infra_selector=\"node-role.kubernetes.io/infra=true\"\n",
+                                "# Redhat customer credentials\n",
+                                "oreg_auth_user=", { "Ref": "RedHatAccountUserName" }, "\n",
+                                "oreg_auth_password=", { "Ref": "RedHatAccountPassword" }, "\n",
+                                "#openshift_override_hostname_check=true\n",
+                                "### OpenShift Master Vars\n",
+                                "openshift_master_api_port=8443\n",
+                                "openshift_master_console_port=8443\n",
+                                "openshift_master_cluster_method=native\n",
+                                "#the next two would be LB's in HA\n",
+                                "#openshift_master_cluster_hostname=ip-172-31-25-175.ap-southeast-1.compute.internal\n",
+                                "#openshift_master_cluster_public_hostname=ec2-13-251-240-166.ap-southeast-1.compute.amazonaws.com\n",
+                                "#this is the domain used when you expose the apps, we probably need to set this one up later on\n",
+                                "openshift_master_default_subdomain=", { "Ref": "OpenShiftAppDNSSubDomain" }, "\n",
+                                "# Set this line to enable NFS\n",
+                                "openshift_enable_unsupported_configurations=True\n",
+                                "### Contrail Variables\n",
+                                "contrail_version=\"", { "Ref": "ContainerRegistryVersion" }, "\"\n", 
+                                "contrail_container_tag=\"", { "Ref": "ContainerRegistryTag" }, "\"\n",
+                                "contrail_registry=\"hub.juniper.net/contrail\"\n",
+                                "contrail_registry_username=", { "Ref": "ContainerRegistryUserName" }, "\n",
+                                "contrail_registry_password=", { "Ref": "ContainerRegistryPassword" }, "\n",
+                                "# need to notify openshift to configure insecure registry as below\n",
+                                "#openshift_docker_insecure_registries=\"ci-repo.englab.juniper.net:5010\"\n",
+                                "openshift_docker_insecure_registries=\"hub.juniper.net/contrail\"\n",
+                                "#contrail_os_release=redhat7\n",
+                                "#analyticsdb_min_diskgb=50\n",
+                                "#configdb_min_diskgb=25\n",
+                                "#aaa_mode=no-auth\n",
+                                "#auth_mode=noauth\n",
+                                "#CLOUD_ORCHESTRATOR=openshift\n",
+                                "#LOG_LEVEL=SYS_NOTICE\n",
+                                "#METADATA_PROXY_SECRET=contrail\n",
+                                "#cloud_orchestrator=kubernetes\n",
+                                "#metadata_proxy_secret=contrail\n",
+                                "#log_level=SYS_NOTICE\n",
+                                "#rabbitmq_node_port=5672\n",
+                                "#zookeeper_analytics_port=2182\n",
+                                "#zookeeper_port=2181\n",
+                                "#zookeeper_ports=2888:3888\n",
+                                "#zookeeper_analytics_ports=4888:5888\n",
+                                "#vrouter_gateway=172.31.16.1\n",
+                                "#vrouter_physical_interface=eth0\n",
+                                "#kubernetes_api_secure_port=443\n",
+                                "#nested_mode_contrail=false\n",
+                                "# vip should be master\n",
+                                "#api_vip=\"172.31.25.175\"\n",
+                                "public_fip_pool=\"{'domain': 'default-domain', 'project': 'k8s-default', 'network': 'k8s-public', 'name': 'default'}\"\n",
+                                "#service subnet and pod subnet in contrail and OpenShift\n",
+                                "osm_cluster_network_cidr=", { "Ref": "PodIPAM" }, "\n",
+                                "pod_subnets=", { "Ref": "PodIPAM" }, "\n",
+                                "osm_host_subnet_length=5\n",
+                                "service_subnets=", { "Ref": "ServiceIPAM" }, "\n",
+                                "openshift_portal_net=", { "Ref": "ServiceIPAM" }, "\n",
+                                "# Multi interface config\n",
+                                "#multi_interface='true'\n",
+                                "#control_nodes=192.168.100.2\n",
+                                "#controller_nodes=10.84.13.54\n",
+                                "#vrouter_physical_interface=ens2f0\n",
+                                "#vrouter_gateway=192.168.100.2\n",
+                                "### OpenShift Network Vars\n",
+                                "#os_sdn_network_plugin_name='redhat/openshift-ovs-networkpolicy'\n",
+                                "openshift_use_openshift_sdn=false\n",
+                                "#r_openshift_node_use_openshift_sdn=True\n",
+                                "os_sdn_network_plugin_name='cni'\n",
+                                "openshift_use_contrail=true\n",
+                                "#openshift_use_calico=true\n",
+                                "### OpenShift Authentication Vars\n",
+                                "# htpasswd Authentication\n",
+                                "openshift_master_identity_providers=[{'name': 'htpasswd_auth', 'login': 'true', 'challenge': 'true', 'kind': 'HTPasswdPasswordIdentityProvider'}]\n",
+                                "### OpenShift Router and Registry Vars\n",
+                                "openshift_hosted_router_replicas=1\n",
+                                "openshift_hosted_registry_replicas=1\n",
+                                "openshift_hosted_registry_storage_kind=nfs\n",
+                                "openshift_hosted_registry_storage_access_modes=['ReadWriteMany']\n",
+                                "openshift_hosted_registry_storage_nfs_directory=/export\n",
+                                "openshift_hosted_registry_storage_nfs_options='*(rw,root_squash)'\n",
+                                "openshift_hosted_registry_storage_volume_name=registry\n",
+                                "openshift_hosted_registry_storage_volume_size=10Gi\n",
+                                "openshift_hosted_registry_pullthrough=true\n",
+                                "openshift_hosted_registry_acceptschema2=true\n",
+                                "openshift_hosted_registry_enforcequota=true\n",
+                                "openshift_hosted_router_selector=\"node-role.kubernetes.io/infra=true\"\n",
+                                "openshift_hosted_registry_selector=\"node-role.kubernetes.io/infra=true\"\n",
+                                "### OpenShift Service Catalog Vars\n",
+                                "openshift_enable_service_catalog=true\n",
+                                "template_service_broker_install=true\n",
+                                "openshift_template_service_broker_namespaces=['openshift']\n",
+                                "ansible_service_broker_install=true\n",
+                                "ansible_service_broker_local_registry_whitelist=['.*-apb$']\n",
+                                "openshift_hosted_etcd_storage_kind=nfs\n",
+                                "openshift_hosted_etcd_storage_nfs_options=\"*(rw,root_squash,sync,no_wdelay)\"\n",
+                                "openshift_hosted_etcd_storage_nfs_directory=/export\n",
+                                "openshift_hosted_etcd_storage_labels={'storage': 'etcd-asb'}\n",
+                                "openshift_hosted_etcd_storage_volume_name=etcd-asb\n",
+                                "openshift_hosted_etcd_storage_access_modes=['ReadWriteOnce']\n",
+                                "openshift_hosted_etcd_storage_volume_size=10G\n",
+                                "### OpenShift Metrics and Logging Vars\n",
+                                "# Enable cluster metrics\n",
+                                "openshift_metrics_install_metrics=True\n",
+                                "openshift_metrics_storage_kind=nfs\n",
+                                "openshift_metrics_storage_access_modes=['ReadWriteOnce']\n",
+                                "openshift_metrics_storage_nfs_directory=/export\n",
+                                "openshift_metrics_storage_nfs_options='*(rw,root_squash)'\n",
+                                "openshift_metrics_storage_volume_name=metrics\n",
+                                "openshift_metrics_storage_volume_size=10Gi\n",
+                                "openshift_metrics_storage_labels={'storage': 'metrics'}\n",
+                                "openshift_metrics_cassandra_nodeselector={\"node-role.kubernetes.io/infra\":\"true\"}\n",
+                                "openshift_metrics_hawkular_nodeselector={\"node-role.kubernetes.io/infra\":\"true\"}\n",
+                                "openshift_metrics_heapster_nodeselector={\"node-role.kubernetes.io/infra\":\"true\"}\n",
+                                "# Enable cluster logging\n",
+                                "openshift_logging_install_logging=false\n",
+                                "### OpenShift Prometheus Vars\n",
+                                "## Add Prometheus Metrics:\n",
+                                "openshift_hosted_prometheus_deploy=true\n",
+                                "openshift_prometheus_node_selector={\"node-role.kubernetes.io/infra\":\"true\"}\n",
+                                "openshift_prometheus_namespace=openshift-metrics\n",
+                                "# Prometheus\n",
+                                "openshift_prometheus_storage_kind=nfs\n",
+                                "openshift_prometheus_storage_access_modes=['ReadWriteOnce']\n",
+                                "openshift_prometheus_storage_nfs_directory=/export\n",
+                                "openshift_prometheus_storage_nfs_options='*(rw,root_squash)'\n",
+                                "openshift_prometheus_storage_volume_name=prometheus\n",
+                                "openshift_prometheus_storage_volume_size=10Gi\n",
+                                "openshift_prometheus_storage_labels={'storage': 'prometheus'}\n",
+                                "openshift_prometheus_storage_type='pvc'\n",
+                                "# For prometheus-alertmanager\n",
+                                "openshift_prometheus_alertmanager_storage_kind=nfs\n",
+                                "openshift_prometheus_alertmanager_storage_access_modes=['ReadWriteOnce']\n",
+                                "openshift_prometheus_alertmanager_storage_nfs_directory=/export\n",
+                                "openshift_prometheus_alertmanager_storage_nfs_options='*(rw,root_squash)'\n",
+                                "openshift_prometheus_alertmanager_storage_volume_name=prometheus-alertmanager\n",
+                                "openshift_prometheus_alertmanager_storage_volume_size=10Gi\n",
+                                "openshift_prometheus_alertmanager_storage_labels={'storage': 'prometheus-alertmanager'}\n",
+                                "openshift_prometheus_alertmanager_storage_type='pvc'\n",
+                                "# For prometheus-alertbuffer\n",
+                                "openshift_prometheus_alertbuffer_storage_kind=nfs\n",
+                                "openshift_prometheus_alertbuffer_storage_access_modes=['ReadWriteOnce']\n",
+                                "openshift_prometheus_alertbuffer_storage_nfs_directory=/export\n",
+                                "openshift_prometheus_alertbuffer_storage_nfs_options='*(rw,root_squash)'\n",
+                                "openshift_prometheus_alertbuffer_storage_volume_name=prometheus-alertbuffer\n",
+                                "openshift_prometheus_alertbuffer_storage_volume_size=10Gi\n",
+                                "openshift_prometheus_alertbuffer_storage_labels={'storage': 'prometheus-alertbuffer'}\n",
+                                "openshift_prometheus_alertbuffer_storage_type='pvc'\n",
+                                "# patch: Disable cockpit as its slow\n",
+                                "osm_use_cockpit=false\n",
+                                "### OpenShift Hosts\n",
+                                "[OSEv3:children]\n",
+                                "masters\n",
+                                "etcd\n",
+                                "nodes\n",
+                                "nfs\n",
+                                "[masters]\n",
+                                { "Fn::GetAtt": ["OpenShiftMasterInstanceAZ1", "PrivateDnsName"] }, "\n",
+                                "[etcd]\n",
+                                { "Fn::GetAtt": ["OpenShiftMasterInstanceAZ1", "PrivateDnsName"] }, "\n",
+                                "[nodes]\n",
+                                { "Fn::GetAtt": ["OpenShiftMasterInstanceAZ1", "PrivateDnsName"] }, " openshift_node_group_name='node-config-master'\n",
+                                { "Fn::GetAtt": ["OpenShiftNodeInstanceAZ1", "PrivateDnsName"] }, " openshift_node_group_name='node-config-compute'\n",
+                                { "Fn::GetAtt": ["OpenShiftNodeInstanceAZ2", "PrivateDnsName"] }, " openshift_node_group_name='node-config-compute'\n",
+                                { "Fn::GetAtt": ["OpenShiftNodeInstanceAZ3", "PrivateDnsName"] }, " openshift_node_group_name='node-config-compute'\n",
+                                "$(curl http://169.254.169.254/latest/meta-data/hostname) openshift_node_group_name='node-config-infra'\n",
+                                "[nfs]\n",
+                                { "Fn::GetAtt": ["OpenShiftMasterInstanceAZ1", "PrivateDnsName"] }, "\n",
+                                "EOF\n",
+                                "echo \"I see quite a few failures due to Redhat subscription-manager servers so before we run ansible lets dump the registration status to the log to help us debug failures\"\n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -m shell -a \"subscription-manager list --consumed | grep 'Pool ID:'\"\n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -m shell -a \"subscription-manager repos --list-enabled | grep 'Repo ID:'\"\n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -m shell -a \"mkdir -p /var/lib/contrail/config-zookeeper\"\n",
+                                "echo \"This patch is from bugzilla 1645725\"\n",
+                                "sed \"s/default=20/default=60/\" -i /root/openshift-ansible/roles/lib_utils/library/docker_creds.py\n",
+                                "sed \"s/timeout 10/timeout 60/\" -i /root/openshift-ansible/roles/openshift_health_checker/openshift_checks/docker_image_availability.py\n",
+                                "sed \"s/timeout 10/timeout 60/\" -i /root/openshift-ansible/roles/openshift_health_checker/test/docker_image_availability_test.py\n",
+                                "ansible-playbook -i inventory/ose-install playbooks/prerequisites.yml > /var/log/bootstrap.log\n",
+                                "ret=$?\n",
+                                "if [ $ret -ne 0 ]; then\n",
+                                "       echo \"**\"\n",
+                                "       echo \"Ansible playbooks/prerequisites.yml failed, redeploy or run the ansible, then all remaining steps in var/lib/cloud/instances/*/user-data.txt manually\"\n",
+                                "       echo \"**\"\n",
+                                "       exit 0\n",
+                                "else\n",
+                                "       echo \"Ansible completed successfuly\"\n",
+                                "fi\n",
+                                "ansible-playbook -i inventory/ose-install playbooks/deploy_cluster.yml >> /var/log/bootstrap.log\n",
+                                "ret=$?\n",
+                                "if [ $ret -ne 0 ]; then\n",
+                                "       echo \"**\"\n",
+                                "       echo \"Ansible deploy_cluster.yml failed, this can occur due to timeouts, rerunning\"\n",
+                                "       echo \"**\"\n",
+                                "       ansible-playbook -i inventory/ose-install playbooks/deploy_cluster.yml >> /var/log/bootstrap.log\n",
+                                "       ret2=$?\n",
+                                "       if [ $ret2 -ne 0 ]; then\n",
+                                "               echo \"**\"\n",
+                                "               echo \"Ansible deploy_cluster.yml failed a second time, redeploy or run the ansible, then all remaining steps in var/lib/cloud/instances/*/user-data.txt manually\"\n",
+                                "               echo \"**\"\n",
+                                "               exit 0\n",
+                                "       else\n",
+                                "               echo \"Ansible completed successfuly on the second run\"\n",
+                                "       fi\n",
+                                "else\n",
+                                "       echo \"Ansible completed successfuly\"\n",
+                                "fi\n",
+                                "ansible masters -i /root/openshift-ansible/inventory/ose-install -m shell -a \"htpasswd -b /etc/origin/master/htpasswd admin ", { "Ref": "ContrailPassword" }, "\"\n",
+                                "ansible masters -i /root/openshift-ansible/inventory/ose-install -m shell -a \"oc adm policy add-cluster-role-to-user cluster-admin admin\"\n",
+                                "ansible masters -i /root/openshift-ansible/inventory/ose-install -m shell -a \"oc login -u admin -p ", { "Ref": "ContrailPassword" }, "\"\n",
+                                "echo \"#this rule gets lost on reboot, resulting in apps failing to reach dns\" >> /etc/rc.d/rc.local \n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -a \"sed -i '/^-A OS_FIREWALL_ALLOW -p tcp -m state --state NEW -m tcp --dport 1936 -j ACCEPT/i -A OS_FIREWALL_ALLOW -p udp -m udp --dport 53 -j ACCEPT' /etc/sysconfig/iptables\"\n",
+                                "echo \"#dnsmasq can fail on boot for some nodes\" >> /etc/rc.d/rc.local  \n",
+                                "echo \"systemctl stop dnsmasq\" >> /etc/rc.d/rc.local \n",
+                                "echo \"systemctl start dnsmasq\" >> /etc/rc.d/rc.local \n",
+                                "chmod +x /etc/rc.d/rc.local \n",
+                                "echo \"ansible -i /root/openshift-ansible/inventory/ose-install all -a \\\"systemctl restart dnsmasq\\\"\" >> /etc/rc.d/rc.local \n",
+                                "#selinux is  triggering a problem inside openshift apps, dns lookups fail after a reboot. openshift_docker_selinux_enabled=False does not work\n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -a \"setenforce permissive\"\n",
+                                "ansible -i /root/openshift-ansible/inventory/ose-install all -a \"sed -i s/^SELINUX=.*$/SELINUX=permissive/ /etc/selinux/config\"\n",
+                                "echo \"all done logs are in /var/log/bootstrap.log\"\n",
+                                "cd /tmp \n",
+                                "wget https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-1.4-31.tar.gz \n",
+                                "easy_install --script-dir /opt/aws/bin aws-cfn-bootstrap-1.4-31.tar.gz \n",
+                                "/opt/aws/bin/cfn-signal -e $? ",
+                                    "  --stack ", { "Ref": "AWS::StackName" },
+                                    "  --resource OpenShiftInfraInstanceAZ1 " ,
+                                    "  --region ", { "Ref" : "AWS::Region" }, "\n"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "CreationPolicy": {
+               "ResourceSignal": {
+                 "Count": "1",
+                 "Timeout": "PT240M"
+               }
+            }
+        },
+        "Eth0InfraAZ1": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ1" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftInfraAZ1PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet1" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftInfraInstanceAZ2": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployHighlyAvailable",
+            "DependsOn": ["PrivateSubnet2", "Eth0InfraAZ2"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone2" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0InfraAZ2" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Infra_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0InfraAZ2": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ2" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftInfraAZ2PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet2" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftInfraInstanceAZ3": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployHighlyAvailable",
+            "DependsOn": ["PrivateSubnet3", "Eth0InfraAZ3"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone3" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0InfraAZ3" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Infra_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0InfraAZ3": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ3" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftInfraAZ3PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet3" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftMasterInstanceAZ1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["PrivateSubnet1", "Eth0MasterAZ1"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0MasterAZ1" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Master_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker zip unzip\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0MasterAZ1": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ1" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftMasterAZ1PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet1" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftMasterInstanceAZ2": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployHighlyAvailable",
+            "DependsOn": ["PrivateSubnet2", "Eth0MasterAZ2"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone2" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0MasterAZ2" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Master_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker zip unzip\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0MasterAZ2": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ2" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftMasterAZ2PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet2" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftMasterInstanceAZ3": {
+            "Type": "AWS::EC2::Instance",
+            "Condition": "HasDeployHighlyAvailable",
+            "DependsOn": ["PrivateSubnet3", "Eth0MasterAZ3"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone3" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0MasterAZ3" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Master_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker zip unzip\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0MasterAZ3": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ3" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftMasterAZ3PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet3" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftNodeInstanceAZ1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["PrivateSubnet1", "Eth0NodeAZ1"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0NodeAZ1" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Node_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0NodeAZ1": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ1" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftNodeAZ1PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet1" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftNodeInstanceAZ2": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["PrivateSubnet2", "Eth0NodeAZ2"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone2" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0NodeAZ2" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Node_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone2" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0NodeAZ2": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ2" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftNodeAZ2PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet2" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "OpenShiftNodeInstanceAZ3": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["PrivateSubnet3", "Eth0NodeAZ3"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone3" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "300"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMI", { "Ref": "AWS::Region" }, "RHEL76HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "InfraInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                    "NetworkInterfaceId": { "Ref": "Eth0NodeAZ3" },
+                    "DeviceIndex": "0"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["OpenShift_Node_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone3" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                "#!/bin/bash -x\n",
+                                "exec > /tmp/part-001.log 2>&1\n",
+                                "echo 'root:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "echo 'ec2-user:", { "Ref": "SSHPassword" }, "' | chpasswd\n",
+                                "sed -i \"s/^#PasswordAuthentication yes/PasswordAuthentication yes/g\" /etc/ssh/sshd_config\n",
+                                "sed -i \"s/^#PermitRootLogin yes/PermitRootLogin yes/g\" /etc/ssh/sshd_config\n",
+                                "mkdir /root/.ssh\n",
+                                "echo \"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC7jYYnix/CUn2u161qoN/Jmv9Lnr5E9/MdP4pBzXjYfqVU9i7wHz2nSnfMTWaRDuv1fw4akrswDe7Q2f3vLnOjq50AlcgagfnTDNQCNgg8S6nRvCQ9TxkGUHZLLZ2K97znfDUug2LLCC9sor953IQOpZFiH2sE9m3ZMjRBJgSIdGNByVkY9hu0upoZBOY5jPC24zClwXsH81Nz9GDTceCaaa5X87W3PDYOHn9fyujaxl6lXkcscjvoCdQU8TYWCxY7d2MeS9TpzVQIhyJGntIAZ1gGSkIL/0xW/pIVP7btjFaTrO7ubC2sbB/RwEjJWbBdce1NZ/yj7QG6X8hXfGKf root@ip-100-72-100-11.eu-west-1.compute.internal\" | tee --append /root/.ssh/authorized_keys\n",
+                                "chmod 0600 /root/.ssh/id_rsa*\n",
+                                "systemctl restart sshd.service\n",
+                                "echo \"MTU=", { "Ref": "NodeMTU" }, "\" >> /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                                "echo \"network:\" > /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg.d/50-curtin-networking.cfg\n",
+                                "ip link set dev eth0 mtu ", { "Ref": "NodeMTU" }, "\n",
+                                "subscription-manager register --username ", { "Ref": "RedHatAccountUserName" }, " --password ", { "Ref": "RedHatAccountPassword" }, " --force\n",
+                                "subscription-manager attach --pool=", { "Ref": "RedHatSubscriptionPoolID" }, " \n",
+                                "subscription-manager repos --disable=\"*\"\n",
+                                "subscription-manager repos --enable=\"rhel-7-server-rpms\" --enable=\"rhel-7-server-extras-rpms\"  --enable=\"rhel-7-server-ose-3.11-rpms\" --enable=rhel-7-fast-datapath-rpms --enable=\"rhel-7-server-ansible-2.6-rpms\"\n",
+                                "yum install -y tcpdump wget git net-tools bind-utils yum-utils bridge-utils bash-completion kexec-tools sos psacct python-netaddr openshift-ansible initscripts docker\n",
+                                "#to avoid ansible timeouts\n",
+                                "yum install -y ansible bash-completion dnsmasq ntp logrotate httpd-tools bind-utils firewalld libselinux-python conntrack-tools openssl iproute python-dbus PyYAML yum-utils glusterfs-fuse device-mapper-multipath nfs-utils iscsi-initiator-utils ceph-common atomic cifs-utils samba-common\n",
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+        "Eth0NodeAZ3": {
+            "Type": "AWS::EC2::NetworkInterface",
+            "Properties": {
+                "Description": "eth0Controller",
+                "GroupSet": [{ "Ref": "SecurityGroupContrailAZ3" }],
+                "PrivateIpAddress": { "Ref": "OpenShiftNodeAZ3PrivateIP" },
+                "SourceDestCheck": "false",
+                "SubnetId": { "Ref": "PrivateSubnet3" },
+                "Tags": [{ "Key": "Name", "Value": "Interface 0" }, { "Key": "Interface", "Value": "eth0" }]
+            }
+        },
+        "IPAssociaton1": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "Condition": "HasDeployContrailCommand",
+            "DependsOn": "ContrailCommandInstance",
+            "Properties": {
+                "NetworkInterfaceId": { "Ref": "Eth0Command" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "IPAddress1",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+        "ContrailLoadBalancer": {
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "Subnets": [{
+                        "Ref": "PrivateSubnet1"
+                    },
+                    {
+                        "Ref": "PrivateSubnet2"
+                    },
+                    {
+                        "Ref": "PrivateSubnet3"
+                    }
+                ],
+                "Scheme": "internal",
+                "Type": "network",
+                "LoadBalancerAttributes": [{ "Key": "load_balancing.cross_zone.enabled", "Value": "true" }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Load_Balancer_", { "Ref": "SiteName" }]] }
+                }]
+            }
+        },
+        "OpenShiftNLBListener1": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "DefaultActions": [{
+                    "Type": "forward",
+                    "TargetGroupArn": { "Ref": "OpenShiftNLBTargetGroup1" }
+                }],
+                "LoadBalancerArn": { "Ref": "ContrailLoadBalancer" },
+                "Port": "8443",
+                "Protocol": "TCP"
+            }
+        },
+        "OpenShiftNLBTargetGroup1": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Condition": "HasDeployHighlyAvailable",
+            "Properties": {
+                "HealthCheckIntervalSeconds": 30,
+                "HealthyThresholdCount": 3,
+                "Port": 8443,
+                "Protocol": "TCP",
+                "UnhealthyThresholdCount": 3,
+                "VpcId": { "Ref": "VPC1" },
+                "Targets": [{ "Id": { "Ref": "OpenShiftMasterInstanceAZ1" }, "Port": 8443 },
+                    { "Id": { "Ref": "OpenShiftMasterInstanceAZ2" }, "Port": 8443 },
+                    { "Id": { "Ref": "OpenShiftMasterInstanceAZ3" }, "Port": 8443 }
+                ],
+                "TargetGroupAttributes": [{ "Key": "deregistration_delay.timeout_seconds", "Value": "60" }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["Contrail_Load_Balancer_Target_Group1_", { "Ref": "SiteName" }]] }
+                }]
+            }
+        }
+    },
+    "Outputs": {
+        "ContrailCommandWebUI": {
+            "Description": "Contrail Command Web UI, please give it a few minutes to build",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":9091"]] }
+
+        },
+        "ContrailUIAZ1": {
+            "Description": "AZ1 Contrail Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8143"]] }
+        },
+        "ContrailUIAZ2": {
+            "Description": "AZ2 Contrail Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8144"]] }
+        },
+        "ContrailUIAZ3": {
+            "Description": "AZ3 Contrail Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8145"]] }
+        },
+        "OpenShiftUIAZ1": {
+            "Description": "AZ1 OpenShift Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8443", "/console/"]] }
+        },
+        "OpenShiftUIAZ2": {
+            "Description": "AZ2 OpenShift Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8444", "/console/"]] }
+        },
+        "OpenShiftUIAZ3": {
+            "Description": "AZ3 OpenShift Web UI via Contrail Command",
+            "Value": { "Fn::Join": ["", ["https://", { "Ref": "IPAddress1" }, ":8445", "/console/"]] }
+        },
+        "ContrailCommandAZ1PublicIP": {
+            "Description": "Contrail Command Public IP",
+            "Value": {
+                "Ref": "IPAddress1"
+            }
+        },
+        "OpenShiftInfraAZ1PrivateIP": {
+            "Description": "Contrail Controller and OpenShift Infra AZ1 Private IP",
+            "Value": {
+                "Ref": "OpenShiftInfraAZ1PrivateIP"
+            }
+        },
+        "OpenShiftInfraAZ2PrivateIP": {
+            "Description": "Contrail Controller and OpenShift Infra AZ2 Private IP",
+            "Value": {
+                "Ref": "OpenShiftInfraAZ2PrivateIP"
+            }
+        },
+        "OpenShiftInfraAZ3PrivateIP": {
+            "Description": "Contrail Controller and OpenShift Infra AZ3 Private IP",
+            "Value": {
+                "Ref": "OpenShiftInfraAZ3PrivateIP"
+            }
+        },
+        "OpenShiftMasterAZ1PrivateIP": {
+            "Description": "OpenShift master AZ1 Private IP",
+            "Value": {
+                "Ref": "OpenShiftMasterAZ1PrivateIP"
+            }
+        },
+        "OpenShiftMasterAZ2PrivateIP": {
+            "Description": "OpenShift master AZ2 Private IP",
+            "Value": {
+                "Ref": "OpenShiftMasterAZ2PrivateIP"
+            }
+        },
+        "OpenShiftMasterAZ3PrivateIP": {
+            "Description": "OpenShift master AZ3 Private IP",
+            "Value": {
+                "Ref": "OpenShiftMasterAZ3PrivateIP"
+            }
+        },
+        "SSHtoContrailCommand": {
+            "Description": "SSH to contrail command",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, ""]] }
+        },
+        "SSHtoOpenShiftInfraAZ1": {
+            "Description": "SSH to the Infra node in AZ1",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, " -p 1139"]] }
+        },
+        "SSHtoOpenShiftMasterAZ1": {
+            "Description": "SSH to the Master Node in AZ1",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, " -p 1140"]] }
+        },
+        "SSHtoOpenShiftNodeAZ1": {
+            "Description": "SSH to the Worker Node in AZ1",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, " -p 1141"]] }
+        },
+        "SSHtoOpenShiftNodeAZ2": {
+            "Description": "SSH to the Worker Node in AZ2",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, " -p 1142"]] }
+        },
+        "SSHtoOpenShiftNodeAZ3": {
+            "Description": "SSH to the Worker Node in AZ3",
+            "Value": { "Fn::Join": ["", ["   ssh -i [your ContrailKey1 private key file] ec2-user@", { "Ref": "IPAddress1" }, " -p 1143"]] }
+        },
+        "HAOpenShiftAPILB": {
+            "Description": "HA Kubernetes API endpoint via the internal load balancer",
+            "Value": { "Fn::Join": ["", ["https://", { "Fn::GetAtt": ["ContrailLoadBalancer", "DNSName"] }, ":8443"]] },
+            "Condition": "HasDeployHighlyAvailable"
+        },
+        "KnownIssue1": {
+            "Description": "after a shutdown and powerup: run the following to ensure dnsmasq has come up on all nodes. On the infra node as root run 1) systemctl stop dnsmasq 2) systemctl start dnsmasq 3) ansible -i /root/openshift-ansible/inventory/ose-install all -a \"systemctl restart dnsmasq\" 4) wait 6 minutes",
+            "Value": "none"
+        },
+        "KnownIssue2": {
+            "Description": "after a shutdown powerup, if your pods stay down after the dnsmasq workaround then run the following (This is Red Hat suggestion) 1)master: oc cluster down 2)infra: ansible -i /root/openshift-ansible/inventory/ose-install all -a \"iptables -F\"  3)master: oc cluster up \"",
+            "Value": "none"
+        }
+    }
+}

@@ -1,0 +1,611 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Deploy and build kubernetes plus calico",
+    "Parameters": {
+        "AvailabilityZone" : {
+          "Description" : "AWS Availability Zone",
+          "Type" : "String",
+          "Default": "eu-central-1a"
+        },
+        "K8SAMI": {
+            "Description": "Kubernetes AMI CentOS 7",
+            "Type": "String",
+            "Default": "ami-04cf43aca3e6f3de3"
+        },
+        "KubernetesInstanceType": {
+            "Description": "Kubernetes Instance Type",
+            "Type": "String",
+            "Default": "m4.2xlarge"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "OneClickKey1"
+        },
+        "VPCCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire VPC.",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "PublicSubnetCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet",
+            "Default": "100.72.100.0/25",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet",
+            "Default": "100.72.100.128/25",
+            "Type": "String"
+        },
+        "MasterPublicIP" : {
+          "Description" : "Minion1 private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.40"
+        },
+        "MasterPrivateIP" : {
+          "Description" : "Minion1 private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.140"
+        },
+        "Minion1PrivateIP" : {
+          "Description" : "Minion1 private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.141"
+        },
+        "Minion2PrivateIP" : {
+          "Description" : "Minion2 private static IP",
+          "Type" : "String",
+          "Default": "100.72.100.142"
+        },
+        "UserLocation" : {
+          "Description" : "The IP address range that can be used to SSH to the EC2 instances",
+          "Type": "String",
+          "MinLength": "9",
+          "MaxLength": "18",
+          "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+          "Default": "0.0.0.0/0",
+          "ConstraintDescription": "Put your IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "SiteName" : {
+          "Description" : "Site Name",
+          "Type" : "String",
+          "Default": "K8SPlusCalico"
+        },
+        "VPCDOMAIN" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "default"
+        }
+    },
+    "Resources": {
+        "VPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR"
+                },
+                "InstanceTenancy": { "Ref" : "VPCDOMAIN" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "VPC", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicSubnet": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "PublicSN1", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "PrivateSN1", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "InternetGW1", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "NATGW1", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "OneCliclPrivateRouteTable1", { "Ref" : "AvailabilityZone" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable"
+                }
+            }
+        },
+
+        "RouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "PubicSubnetRouteTable1", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "Route": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "RouteTable"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "SubnetRouteTableAssociation": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet"
+                },
+                "RouteTableId": {
+                    "Ref": "RouteTable"
+                }
+            }
+        },
+        "IPAddress": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SecurityGroupKubernetes": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "VPC"
+                },
+                "GroupDescription": "Security group for Instances on the Private SN",
+                "GroupName" : { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "Private SG", { "Ref" : "AvailabilityZone" } ] ] },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": {"Ref" : "VPCCIDR"},
+                        "Description": "allow access to the Instances within the VPC"
+                    },
+		    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": {"Ref" : "UserLocation"},
+                        "Description": "allow ssh access"
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "-1",
+                        "FromPort": "-1",
+                        "ToPort": "-1",
+                        "CidrIp": "0.0.0.0/0",
+                        "Description": "allow all outbound traffic"
+		    }
+		],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "Instance Private Security Group", { "Ref" : "AvailabilityZone" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SGIngressSecurityGroupKubernetes": {
+          "Type": "AWS::EC2::SecurityGroupIngress",
+          "Properties": {
+            "GroupId" : {
+              "Ref" : "SecurityGroupKubernetes"
+            },
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "SourceSecurityGroupId": {
+              "Ref": "SecurityGroupKubernetes"
+            },
+            "Description": "loopback rule"
+          }
+        },
+        "k8masterInstance": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet", "Eth0Master" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "300"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "K8SAMI"
+              },
+              "InstanceType": {
+                  "Ref": "KubernetesInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth0Master" },
+                "DeviceIndex" : "0"
+                },
+                {
+                  "NetworkInterfaceId" : {"Ref" : "Eth1Master" },
+                  "DeviceIndex" : "1"
+                  }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "K8S Master Instance", { "Ref" : "AvailabilityZone" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum install -y ntp\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "echo \"GATEWAYDEV=ens3\" >> /etc/sysconfig/network\n",
+                          "echo \"network:\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"  config: disabled\" >> /etc/cloud/cloud.cfg\n",
+                          "echo \"BOOTPROTO=dhcp\" | tee /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"DEVICE=ens4\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"ONBOOT=yes\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"TYPE=Ethernet\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "echo \"USERCTL=no\" | tee --append /etc/sysconfig/network-scripts/ifcfg-ens4\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "systemctl restart network.service\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth0Master" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupKubernetes" } ],
+            "PrivateIpAddress" : { "Ref" : "MasterPublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PublicSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "Eth1Master" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth1",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupKubernetes" } ],
+            "PrivateIpAddress" : { "Ref" : "MasterPrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 1"}, {"Key" : "Interface", "Value" : "eth1"} ]
+            }
+        },
+        "IPAssociaton": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "DependsOn": "k8masterInstance",
+            "Properties": {
+                "NetworkInterfaceId" : { "Ref" : "Eth0Master" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "IPAddress",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+        "Minion1Instance": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet", "Eth1Minion" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "50"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "K8SAMI"
+              },
+              "InstanceType": {
+                  "Ref": "KubernetesInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth1Minion" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "K8S Master Instance", { "Ref" : "AvailabilityZone" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum install -y ntp\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "systemctl restart network.service\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth1Minion" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth1Minion",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupKubernetes" } ],
+            "PrivateIpAddress" : { "Ref" : "Minion1PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        },
+        "Minion2Instance": {
+          "Type": "AWS::EC2::Instance",
+          "DependsOn": [ "PrivateSubnet", "Eth2Minion" ],
+          "Properties": {
+              "AvailabilityZone" : { "Ref" : "AvailabilityZone" },
+              "BlockDeviceMappings" : [
+                  {
+                       "DeviceName" : "/dev/sda1",
+                       "Ebs" : {
+                       "VolumeSize" : "50"
+                       }
+                  }
+              ],
+              "ImageId": {
+                  "Ref": "K8SAMI"
+              },
+              "InstanceType": {
+                  "Ref": "KubernetesInstanceType"
+              },
+              "KeyName": {
+                  "Ref": "KeyName"
+              },
+              "NetworkInterfaces" : [ {
+                "NetworkInterfaceId" : {"Ref" : "Eth2Minion" },
+                "DeviceIndex" : "0"
+                }],
+              "Tags": [
+                  {
+                      "Key": "Name",
+                      "Value": { "Fn::Join" : [ ".", [ { "Ref" : "SiteName" }, "K8S Master Instance", { "Ref" : "AvailabilityZone" } ] ] }
+                  }
+              ],
+              "UserData": {
+                  "Fn::Base64": {
+                    "Fn::Join": [
+                        "",
+                        [
+                          "#!/bin/bash -x\n",
+                          "exec > /tmp/part-001.log 2>&1\n",
+                          "echo \"\nPermitRootLogin yes\" | tee --append /etc/ssh/sshd_config\n",
+                          "ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N \"\"\n",
+                          "cat /root/.ssh/id_rsa.pub | tee --append /root/.ssh/authorized_keys\n",
+                          "chmod 0600 /root/.ssh/id_rsa*\n",
+                          "systemctl restart sshd.service\n",
+                          "yum install -y yum-utils device-mapper-persistent-data lvm2\n", 
+                          "yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo\n", 
+                          "yum install -y bind-utils\n", 
+                          "yum install -y ntp\n", 
+                          "systemctl start ntpd\n", 
+                          "systemctl enable ntpd\n",
+                          "rm -f /etc/sysconfig/network-scripts/ifcfg-eth0\n",
+                          "rm -f /var/run/dhclient*\n",
+                          "systemctl restart network.service\n"
+                        ]
+                    ]
+                  }
+              }
+            }
+        },
+        "Eth2Minion" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "eth1Minion",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupKubernetes" } ],
+            "PrivateIpAddress" : { "Ref" : "Minion2PrivateIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Interface 0"}, {"Key" : "Interface", "Value" : "eth0"} ]
+          }
+        }
+    },
+    "Outputs" : {
+           "MasterPublicIP": {
+                   "Description": "Master Public IP",
+                   "Value": {
+                               "Ref": "MasterPublicIP"
+                       }
+           },
+           "MasterPrivateIP": {
+                   "Description": "Master Private IP",
+                   "Value": {
+                               "Ref": "MasterPrivateIP"
+                       }
+           },
+           "Minion1PrivateIP": {
+                   "Description": "Minion1 Private IP",
+                   "Value": {
+                               "Ref": "Minion1PrivateIP"
+                       }
+           },
+           "Minion2PrivateIP": {
+                   "Description": "Minion2 Private IP",
+                   "Value": {
+                               "Ref": "Minion2PrivateIP"
+                       }
+           },
+           "SSHtoK8Master": {
+                   "Description": "SSH to the k8master",
+                   "Value": { "Fn::Join": [ "", [ "   ssh -i [OneClick key public key file] centos@", {"Ref": "IPAddress"} ] ] }
+           }
+    }
+}
+

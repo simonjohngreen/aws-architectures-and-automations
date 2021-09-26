@@ -1,0 +1,96 @@
+
+
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+	<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+	<title>Streama</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+	<style type="text/css">
+	[ng\:cloak], [ng-cloak], [data-ng-cloak], [x-ng-cloak], .ng-cloak, .x-ng-cloak {
+		display: none !important;
+	}
+	</style>
+
+	<link rel="stylesheet" href="/assets/vendor-c674d1b1dbabff91a594e406bd9dfc7c.css"/>
+	<link rel="stylesheet" href="/assets/application-d7983ae4bf8d6347d07cc38c6ad8770c.css"/>
+
+  <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
+
+	<script type="text/javascript">
+		window.contextPath = "";
+	</script>
+</head>
+
+<body>
+  <style>.login-page{ background-image: url(/assets/bg.jpg);}</style>
+	<div class="page-container login-page">
+    <div id='login' ng-app="streama.auth" class="ng-cloak" ng-controller="authController">
+      <img class="auth-logo" src="/assets/logo.png" alt="Streama Logo">
+			<div class='inner'>
+
+      
+
+        <form action='/login/authenticate' method='POST' id='loginForm' class='cssform form-horizontal' autocomplete='off'>
+
+          <div class="form-group">
+            <div class="col-lg-12">
+              <input type="text" name="username" class="form-control" placeholder="{{'LOGIN.USERNAME' | translate}}">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="col-lg-12">
+              <input type="password" name='password' class="form-control" placeholder="{{'LOGIN.PASSWORD' | translate}}">
+            </div>
+          </div>
+          <span>
+            
+              {{'LOGIN.FIRST_TIME_HINT' | translate}}
+            
+            <input style="display: none;" type='checkbox' name='remember_me' id='remember_me' checked='checked'/>
+
+            <button class="btn btn-primary pull-right">{{'LOGIN.SUBMIT' | translate}} &nbsp; <i class="ion-chevron-right"></i></button></span>
+        </form>
+      </div>
+    </div>
+    <div class="page-container-push"></div>
+  </div>
+
+  
+<div class="footer">
+  
+    <div class="version">v1.7.2</div>
+  
+</div>
+
+
+
+	<script type="text/javascript" src="/assets/vendor-469de78f6e466e5d0c50420abd29f3c6.js" ></script>
+	<script type="text/javascript" src="/assets/streama/streama.translations-da4beaa74c4253256117164c1ea05288.js" ></script>
+
+  <script type='text/javascript'>
+    <!--
+    (function() {
+      document.forms['loginForm'].elements['username'].focus();
+    })();
+
+    angular.module('streama.auth', ['streama.translations', 'LocalStorageModule']);
+
+    angular.module('streama.auth').controller('authController', function ($translate, localStorageService) {
+      localStorageService.remove('currentProfile');
+      var sessionExpired = false;
+      if(sessionExpired){
+        alertify.log($translate.instant('LOGIN.SESSION_EXPIRED'));
+      }
+    })
+    // -->
+  </script>
+
+
+  
+
+</body>
+</html>

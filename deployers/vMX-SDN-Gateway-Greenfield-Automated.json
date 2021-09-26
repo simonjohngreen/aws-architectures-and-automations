@@ -1,0 +1,1204 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "This automated stack deploys a vMX its VPC, Subnets, route tables , security, some test bare metal networks and servers. It configures the vMX ready to act as an SDN gateway.",
+    "Parameters": {
+        "AvailabilityZone1": {
+            "Description": "AWS Availability Zone For the SDN Gateway",
+            "Type": "String",
+            "Default": "eu-west-2a"
+        },
+        "SDNGatewayInstanceType": {
+            "Description": "SDN Gateway Instance Type. By default we run in lite mode",
+            "Type": "String",
+            "Default": "m4.xlarge"
+        },
+        "BareMetalInstanceType": {
+            "Description": "bare metal test instance type",
+            "Type": "String",
+            "Default": "t2.nano"
+        },
+        "BareMetalServer1Deploy": {
+            "AllowedValues": [ "true", "false" ],
+            "Default": "true",
+            "Description": "true and we deploy a bare metal test instance into bare network subnet 1 for you",
+            "Type": "String"
+        },
+        "BareMetalServer2Deploy": {
+            "AllowedValues": [ "true", "false" ],
+            "Default": "true",
+            "Description": "true and we deploy a bare metal test instance into bare network subnet 2 for you",
+            "Type": "String"
+        },
+        "BareMetal1RouteTarget": {
+            "Default": "1001",
+            "Description": "Route target for Bare Metal network 1, ge-0/0/1",
+            "Type": "String"
+        },
+        "BareMetal2RouteTarget": {
+            "Default": "1002",
+            "Description": "Route target for Bare Metal network 1, ge-0/0/2",
+            "Type": "String"
+        },
+        "KeyName": {
+            "Description": "SSH Key Name",
+            "Type": "AWS::EC2::KeyPair::KeyName",
+            "Default": "Contrailkey-uk"
+        },
+        "SDNGatewayFXP0PublicIP": {
+            "Description": "SDN Gateway public static IP",
+            "Type": "String",
+            "Default": "100.72.100.204"
+        },
+        "SDNGatewayFXP0PublicIPSN": {
+            "Description": "SDN Gateway public static IP SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE000": {
+            "Description": "SDN Gateway private static IP on GE000 used for contrail controller traffic",
+            "Type": "String",
+            "Default": "100.72.100.12"
+        },
+        "SDNGatewayAZ1PrivateIPGE000SN": {
+            "Description": "SDN Gateway private static IP on GE000 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE000AWSGW": {
+            "Description": "AWS GW IP on the private subnets (control and data plane traffic)",
+            "Type": "String",
+            "Default": "100.72.100.1"
+        },
+        "SDNGatewayAZ1PrivateIPGE001": {
+            "Description": "SDN Gateway private static IP on GE001",
+            "Type": "String",
+            "Default": "100.72.101.4"
+        },
+        "SDNGatewayAZ1PrivateIPGE001SN": {
+            "Description": "SDN Gateway private static IP on GE001 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "SDNGatewayAZ1PrivateIPGE002": {
+            "Description": "SDN Gateway private static IP on GE002",
+            "Type": "String",
+            "Default": "100.72.101.68"
+        },
+        "SDNGatewayAZ1PrivateIPGE002SN": {
+            "Description": "SDN Gateway private static IP on GE002 SubNet Length",
+            "Type": "String",
+            "Default": "26"
+        },
+        "UserLocation" : {
+            "Description": "The IP address range that can be used for OAM access directly to the Gateway instance over internet. Typically your laptop /32. If left blank we will add 0.0.0./0 and allow ssh from anywhere",
+            "Type": "String",
+            "MinLength": "9",
+            "MaxLength": "18",
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "Default": "0.0.0.0/0",
+            "ConstraintDescription": "Put your Client IP here x.x.x.x/32, if you leave it blank then 0.0.0.0/0 will be populated and the internet will be able access your deployments UI and SSH"
+        },
+        "BareMetal1Subnet" : {
+            "Description": "VPC Subnet to create and attach to the vMX  port  ge-0/0/1. If  you do not want this subnet created then  set it to notset",
+            "Type": "String",
+            "Default": "100.72.101.0/26"
+        },
+        "BareMetalGateway1" : {
+            "Description": "VPC Subnet AWS Gateway for port  ge-0/0/1",
+            "Type": "String",
+            "Default": "100.72.101.1"
+        },
+        "BareMetal2Subnet" : {
+            "Description": "VPC Subnet to create and attach to the vMX  port  ge-0/0/2. If  you do not want this subnet created then  set it to notset",
+            "Type": "String",
+            "Default": "100.72.101.64/26"
+        },
+        "BareMetalGateway2" : {
+            "Description": "VPC Subnet AWS Gateway for port  ge-0/0/2",
+            "Type": "String",
+            "Default": "100.72.101.65"
+        },
+        "SGSubnet1": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet2": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet3": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SGSubnet4": {
+            "Description": "AN additional IP address range allowed in security to point towards the SDN Gateway on the private subnet. Leave it blank if you do not want it populated",
+            "Type": "String",
+            "Default": "notset"
+        },
+        "SiteName": {
+            "Description": "Site Name",
+            "Type": "String",
+            "Default": "SDNGateway1"
+        },
+        "SSHEncryptedPassword": {
+            "Description": "SSH Encrypted Password",
+            "Type": "String",
+            "Default": "$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.",
+            "NoEcho": true
+        },
+        "VPCCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for entire management control VPC.",
+            "Default": "100.72.100.0/23",
+            "Type": "String"
+        },
+        "VPCDOMAIN" : {
+          "Description" : "VCP domain type",
+          "Type" : "String",
+          "Default": "default"
+        },
+        "PublicSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the public subnet",
+            "Default": "100.72.100.192/26",
+            "Type": "String"
+        },
+        "PrivateSubnetCIDR1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "CIDR block parameter must be in the form x.x.x.x/16-28",
+            "Description": "CIDR block for the private subnet AZ1",
+            "Default": "100.72.100.0/26",
+            "Type": "String"
+        },
+        "ContrailbgppeerIP1": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP1 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.13",
+            "Type": "String"
+        },
+        "ContrailbgppeerIP2": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP2 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.14",
+            "Type": "String"
+        },
+        "ContrailbgppeerIP3": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+            "Description": "Contrail BGP3 Peer ip address x.x.x.x. If you are not running  HA  use the same address in  all three peers",
+            "Default": "172.30.188.15",
+            "Type": "String"
+        },
+        "ContrailbgpASN": {
+            "Description": "Contrail BGP Peer ip address x.x.x.x",
+            "Default": "64512",
+            "Type": "String"
+        },
+        "ContrailUnderlayNetwork": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "in the form x.x.x.x/xx",
+            "Description": "Contrails underlay Network CIDR for BGP and MPLSoGRE in the form x.x.x.x/xx",
+            "Default": "172.30.0.0/16",
+            "Type": "String"
+        },
+        "ContrailOverlayNetworks": {
+            "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+            "ConstraintDescription": "in the form x.x.x.x/xx",
+            "Description": "Contrails Overlay Networks to accept, Supernet in the form x.x.x.x/xx",
+            "Default": "10.32.0.0/12",
+            "Type": "String"
+        }
+    },
+    "Mappings": {
+        "AWSRegionArch2AMIR18PAYG": {
+            "eu-central-1": { "VMXHVM": "ami-01d92771730e32cd9" },
+            "ap-southeast-2": { "VMXHVM": "ami-06802f78db7a687f2" },
+            "eu-west-1": { "VMXHVM": "ami-08d42f017ad3870f2" },
+            "us-east-1": { "VMXHVM": "ami-0c27852fa00391f54" },
+            "us-east-2": { "VMXHVM": "ami-05aa93d5f6932b707" },
+            "us-west-2": { "VMXHVM": "ami-0e86bb4f89f845f0c" },
+            "ap-northeast-1": { "VMXHVM": "ami-052d8f3d93bb0dcac" },
+            "eu-west-2": { "VMXHVM": "ami-0346a364c86458dd9" },
+            "eu-west-3": { "VMXHVM": "ami-01f0bd231424c5541" },
+            "ap-southeast-1": { "VMXHVM": "ami-03cb7b2081381ea67" },
+            "eu-north-1": { "VMXHVM": "ami-af62ead1" },
+            "ap-south-1": { "VMXHVM": "ami-0676729a6c4bfae96" },
+            "ap-northeast-2": { "VMXHVM": "ami-09aa2ca6605222c2a" },
+            "sa-east-1": { "VMXHVM": "ami-0e40c323dd59d6b7f" }
+        },
+        "AWSRegionArch2AMIR19BYOL": {
+            "eu-central-1": { "VMXHVM": "ami-0c909c0cb95ea516c" },
+            "ap-southeast-2": { "VMXHVM": "ami-0a40f79fe18e8f533" },
+            "eu-west-1": { "VMXHVM": "ami-0ad95096c95740994" },
+            "us-east-1": { "VMXHVM": "ami-058765f5dec711ffa" },
+            "us-east-2": { "VMXHVM": "ami-0ef9b8961acd0a1c8" },
+            "us-west-2": { "VMXHVM": "ami-0781d045dc5b2d427" },
+            "ap-northeast-1": { "VMXHVM": "ami-00f30a38d8a453af1" },
+            "eu-west-2": { "VMXHVM": "ami-0c20283d59ade6460" },
+            "eu-west-3": { "VMXHVM": "ami-037ebcc38ee13c894" },
+            "ap-southeast-1": { "VMXHVM": "ami-0f35be28517f75e3e" },
+            "eu-north-1": { "VMXHVM": "ami-0b3143844e6e605be" },
+            "ap-south-1": { "VMXHVM": "ami-0643f4f6b95785ec9" },
+            "ap-northeast-2": { "VMXHVM": "ami-0ca8ddbef790d121c" },
+            "sa-east-1": { "VMXHVM": "ami-0cd239c3c7b78efe2" }
+        },
+        "AWSRegionArch2AMIBM": {
+            "eu-central-1": { "HVM": "ami-0bad2b43a871348da" },
+            "ap-southeast-2": { "HVM": "ami-07e22925f7bf77a0c" },
+            "eu-west-1": { "HVM": "ami-0f2ed58082cb08a4d" },
+            "us-east-1": { "HVM": "ami-039a49e70ea773ffc" },
+            "us-east-2": { "HVM": "ami-03ffa9b61e8d2cfda" },
+            "us-west-2": { "HVM": "ami-008c6427c8facbe08" },
+            "ap-northeast-1": { "HVM": "ami-0196a6e6d6129f2c8" },
+            "eu-west-2": { "HVM": "ami-0b1912235a9e70540" },
+            "eu-west-3": { "HVM": "ami-0b1912235a9e70540" },
+            "ap-southeast-1": { "HVM": "ami-01c54eee4ab8725c0" },
+            "eu-north-1": { "HVM": "ami-0caae0b310f01ff33" },
+            "ap-south-1": { "HVM": "ami-01b8d0884f38e37b4" },
+            "ap-northeast-2": { "HVM": "ami-04e5ceec6723d7ec5" },
+            "sa-east-1": { "HVM": "ami-0bb677666cd3fd188" }
+        }
+    },
+    "Conditions": {
+        "HasSGSubnet1": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet1" }, "notset"] }] },
+        "HasSGSubnet2": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet2" }, "notset"] }] },
+        "HasSGSubnet3": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet3" }, "notset"] }] },
+        "HasSGSubnet4": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "SGSubnet4" }, "notset"] }] },
+        "HasSGContrailUnderlayNetwork": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "ContrailUnderlayNetwork" }, "notset"] }] },
+        "HasBareMetal1Subnet": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "BareMetal1Subnet" }, "notset"] }] },
+        "HasBareMetalServer1Deploy": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "BareMetalServer1Deploy" }, "false"] }] },
+        "HasBareMetal2Subnet": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "BareMetal2Subnet" }, "notset"] }] },
+        "HasBareMetalServer2Deploy": { "Fn::Not": [{ "Fn::Equals": [{ "Ref": "BareMetalServer2Deploy" }, "false"] }] }
+    },
+    "Resources": {
+        "idVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": {
+                    "Ref": "VPCCIDR1"
+                },
+                "InstanceTenancy": { "Ref" : "VPCDOMAIN" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "Contrail", { "Ref" : "SiteName" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "idVPC" },
+                "CidrBlock": {
+                    "Ref": "PublicSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPublicSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "idVPC" },
+                "CidrBlock": {
+                    "Ref": "PrivateSubnetCIDR1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPrivateSN1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "InternetGateway": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailInternetGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "NATEIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "NAT": {
+            "DependsOn": "AttachGateway",
+            "Type": "AWS::EC2::NatGateway",
+            "Properties": {
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "NATEIP",
+                        "AllocationId"
+                    ]
+                },
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailNATGW1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ControllerPrivateRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "PrivateSubnetRoute": {
+            "Type": "AWS::EC2::Route",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": {
+                    "Ref": "NAT"
+                }
+            }
+        },
+        "PrivateSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PrivateSubnetRouteTable1"
+                }
+            }
+        },
+        "PublicRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "ContrailPubicSubnetRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "PublicRoute1": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": "AttachGateway",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }
+            }
+        },
+        "PublicSubnetRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable1"
+                }
+            }
+        },
+        "IPAddress1": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SDNGWFXP0PUBLICIP": {
+            "Type": "AWS::EC2::EIP",
+            "Properties": {
+                "Domain": "vpc"
+            }
+        },
+        "SecurityGroupSDNGW": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "GroupDescription": "Security group for the SDN Gateway, public and on internet",
+                "GroupName": { "Fn::Join": [".", ["SDN_Gateway_public_SG", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] },
+                "SecurityGroupIngress": [{
+                        "IpProtocol": "tcp",
+                        "FromPort": 22,
+                        "ToPort": 22,
+                        "CidrIp": { "Ref": "UserLocation" },
+                        "Description": "allow ssh access from the client"
+                    }
+                ],
+                "SecurityGroupEgress": [{
+                    "IpProtocol": "-1",
+                    "FromPort": "-1",
+                    "ToPort": "-1",
+                    "CidrIp": "0.0.0.0/0",
+                    "Description": "allow all outbound traffic"
+                }],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["SDN_Gateway_Security_Group", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }]
+            }
+        },
+        "SgEntryGW01": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet1",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet1" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet1"
+            }
+        },
+        "SgEntryGW02": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet2",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet2" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet2"
+            }
+        },
+        "SgEntryGW03": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet3",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet3" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet3"
+            }
+        },
+        "SgEntryGW04": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGSubnet4",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "SGSubnet4" },
+                "Description": "allow inbound traffic to the SDN Gateway from a specified subnet subnet4"
+            }
+        },
+        "SgEntryContrailUnderlaySN": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Condition": "HasSGContrailUnderlayNetwork",
+            "Properties": {
+                "GroupId": { "Ref": "SecurityGroupSDNGW" },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "CidrIp": { "Ref": "ContrailUnderlayNetwork" },
+                "Description": "allow inbound traffic to the SDN Gateway from the contrail underlay subnet"
+            }
+        },
+        "SGIngressSecurityGroupSDNGW": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "GroupId": {
+                    "Ref": "SecurityGroupSDNGW"
+                },
+                "IpProtocol": "-1",
+                "FromPort": "-1",
+                "ToPort": "-1",
+                "SourceSecurityGroupId": {
+                    "Ref": "SecurityGroupSDNGW"
+                },
+                "Description": "loopback rule"
+            }
+        },
+        "BMRouteTable1": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasBareMetal1Subnet",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "BareMetalRouteTable1", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "BMRoute1": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasBareMetal1Subnet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "BMRouteTable1"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NetworkInterfaceId": {
+                    "Ref": "BareMetal1Interface"
+                }
+            }
+        },
+        "BMRouteTableAssociation1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasBareMetal1Subnet",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "BMSubnet1"
+                },
+                "RouteTableId": {
+                    "Ref": "BMRouteTable1"
+                }
+            }
+        },
+        "BMSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasBareMetal1Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "idVPC" },
+                "CidrBlock": {
+                    "Ref": "BareMetal1Subnet"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "BareMetal1Subnet", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "BMRouteTable2": {
+            "Type": "AWS::EC2::RouteTable",
+            "Condition": "HasBareMetal2Subnet",
+            "Properties": {
+                "VpcId": { "Ref": "idVPC" },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "BareMetalRouteTable2", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    },
+                    {
+                        "Key": "CloudFormationStack",
+                        "Value": {
+                            "Ref": "AWS::StackId"
+                        }
+                    }
+                ]
+            }
+        },
+        "BMRoute2": {
+            "Type": "AWS::EC2::Route",
+            "Condition": "HasBareMetal2Subnet",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "BMRouteTable2"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NetworkInterfaceId": {
+                    "Ref": "BareMetal2Interface"
+                }
+            }
+        },
+        "BMRouteTableAssociation2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Condition": "HasBareMetal2Subnet",
+            "Properties": {
+                "SubnetId": {
+                    "Ref": "BMSubnet2"
+                },
+                "RouteTableId": {
+                    "Ref": "BMRouteTable2"
+                }
+            }
+        },
+        "BMSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Condition": "HasBareMetal2Subnet",
+            "Properties": {
+                "AvailabilityZone" : { "Ref" : "AvailabilityZone1" },
+                "VpcId": { "Ref": "idVPC" },
+                "CidrBlock": {
+                    "Ref": "BareMetal2Subnet"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": { "Fn::Join" : [ ".", [ "BareMetal2Subnet", { "Ref" : "SiteName" }, { "Ref" : "AvailabilityZone1" } ] ] }
+                    }
+                ]
+            }
+        },
+        "SDNGatewayInstance": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["Eth0SDNGateway", "SDNCPDPInterface"],
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "100"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMIR19BYOL", { "Ref": "AWS::Region"}, "VMXHVM"]
+                },
+                "InstanceType": {
+                    "Ref": "SDNGatewayInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "NetworkInterfaces": [{
+                        "NetworkInterfaceId": { "Ref": "Eth0SDNGateway" },
+                        "DeviceIndex": "0"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "SDNCPDPInterface" },
+                        "DeviceIndex": "1"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "BareMetal1Interface" },
+                        "DeviceIndex": "2"
+                    },
+                    {
+                        "NetworkInterfaceId": { "Ref": "BareMetal2Interface" },
+                        "DeviceIndex": "3"
+                    }
+                ],
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["SDN_Gateway_Instance", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                 "#junos-config\n",
+                                 "groups {\n",
+                                 "    global {\n",
+                                 "        system {\n",
+                                 "            host-name HOSTNAME;\n",
+                                 "            root-authentication {\n",
+                                 "                encrypted-password \"$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.\"; ## SECRET-DATA\n",
+                                 "            }\n",
+                                 "            login {\n",
+                                 "                user jnpr {\n",
+                                 "                    uid 2000;\n",
+                                 "                    class super-user;\n",
+                                 "                    authentication {\n",
+                                 "                        ssh-rsa \"SSHRSAKEY\";\n", 
+                                 "                        encrypted-password \"$6$EJlAdXxd$qg4pMaAu4Pf9.Vxmz7Gpdypn1Uw2gzzMV17WEiqGqRXVfh5UbfZ4YFZNBC4XR56nhXzWoZdFiu2gPMeN6JEn3.\"; ## SECRET-DATA\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            services {\n",
+                                 "                ssh {\n",
+                                 "                    root-login deny-password;\n",
+                                 "                    max-sessions-per-connection 32;\n",
+                                 "                    client-alive-interval 120;\n",
+                                 "                }\n",
+                                 "                netconf {\n",
+                                 "                    ssh;\n",
+                                 "                    traceoptions {\n",
+                                 "                        file netconf-ops.log size 3m files 20 world-readable;\n",
+                                 "                        flag all;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            syslog {\n",
+                                 "                user * {\n",
+                                 "                    any emergency;\n",
+                                 "                }\n",
+                                 "                file messages {\n",
+                                 "                    any notice;\n",
+                                 "                    authorization info;\n",
+                                 "                }\n",
+                                 "                file interactive-commands {\n",
+                                 "                    interactive-commands any;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ntp {\n",
+                                 "                server 169.254.169.123;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        chassis {\n",
+                                 "            fpc 0 {\n",
+                                 "                pic 0 {\n",
+                                 "                    tunnel-services;\n",
+                                 "                }\n",
+                                 "                lite-mode;\n",
+                                 "            }\n",
+                                 "            network-services enhanced-ip;\n",
+                                 "        }\n",
+                                 "        interfaces {\n",
+                                 "            fxp0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayFXP0PublicIP" }, "/", { "Ref": "SDNGatewayFXP0PublicIPSN" }, ";\n", 
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            lo0 {\n",
+                                 "                unit 0;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route 0.0.0.0/0 {\n",
+                                 "                    next-hop GATEWAY;\n", 
+                                 "                    retain;\n",
+                                 "                    no-readvertise;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_basic__ {\n",
+                                 "        snmp {\n",
+                                 "            community public {\n",
+                                 "                authorization read-only;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        policy-options {\n",
+                                 "            policy-statement MAINTENANCE-MODE {\n",
+                                 "                term term1 {\n",
+                                 "                    from {\n",
+                                 "                        family evpn;\n",
+                                 "                        nlri-route-type [ 2 1 3 4 5 6 ];\n",
+                                 "                    }\n",
+                                 "                    then {\n",
+                                 "                        community add COM-MAINTENANCE;\n",
+                                 "                        accept;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "                term term100 {\n",
+                                 "                    then accept;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            policy-statement REJECT-MAINTENANCE-MODE {\n",
+                                 "                term term1 {\n",
+                                 "                    from {\n",
+                                 "                        family evpn;\n",
+                                 "                        community COM-MAINTENANCE;\n",
+                                 "                        nlri-route-type [ 2 1 3 4 5 6 ];\n",
+                                 "                    }\n",
+                                 "                    then reject;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            policy-statement MAINTENANCE-MODE-underlay {\n",
+                                 "                then {\n",
+                                 "                    as-path-prepend \"9999 9999 9999\";\n",
+                                 "                    accept;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            community COM-MAINTENANCE members 9999:9999;\n",
+                                 "        }\n",
+                                 "        protocols {\n",
+                                 "            l2-learning {\n",
+                                 "                global-mac-table-aging-time 1800;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_overlay_bgp__ {\n",
+                                 "        policy-options {\n",
+                                 "            policy-statement _contrail_ibgp_export_policy {\n",
+                                 "                term inet-vpn {\n",
+                                 "                    from family inet-vpn;\n",
+                                 "                    then {\n",
+                                 "                        next-hop self;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "                term inet6-vpn {\n",
+                                 "                    from family inet6-vpn;\n",
+                                 "                    then {\n",
+                                 "                        next-hop self;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            route-distinguisher-id ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "            dynamic-tunnels {\n",
+                                 "                _contrail_gre_tunnel {\n",
+                                 "                    source-address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    gre;\n",
+                                 "                    destination-networks {\n",
+                                 "                        ", { "Ref": "ContrailUnderlayNetwork" }, ";\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            resolution {\n",
+                                 "                rib bgp.rtarget.0 {\n",
+                                 "                    resolution-ribs inet.0;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            router-id ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "            autonomous-system ", { "Ref": "ContrailbgpASN" }, " loops 2;\n",
+                                 "        }\n",
+                                 "        protocols {\n",
+                                 "            bgp {\n",
+                                 "                group _contrail_asn-", { "Ref": "ContrailbgpASN" }, " {\n",
+                                 "                    type internal;\n",
+                                 "                    local-address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    hold-time 90;\n",
+                                 "                    family inet-vpn {\n",
+                                 "                        unicast;\n",
+                                 "                    }\n",
+                                 "                    family inet6-vpn {\n",
+                                 "                        unicast;\n",
+                                 "                    }\n",
+                                 "                    family evpn {\n",
+                                 "                        signaling;\n",
+                                 "                    }\n",
+                                 "                    family route-target;\n",
+                                 "                    export _contrail_ibgp_export_policy;\n",
+                                 "                    cluster ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, ";\n",
+                                 "                    local-as ", { "Ref": "ContrailbgpASN" }, " loops 2;\n",
+                                 "                    multipath;\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP1" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP2" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    neighbor ", { "Ref": "ContrailbgppeerIP3" }, " {\n",
+                                 "                        peer-as ", { "Ref": "ContrailbgpASN" }, ";\n",
+                                 "                    }\n",
+                                 "                    vpn-apply-export;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_overlay_networking__ {\n",
+                                 "        routing-instances {\n",
+                                 "            _contrail_net2-l3-7 {\n",
+                                 "                instance-type vrf;\n",
+                                 "                interface ge-0/0/2.0;\n",
+                                 "                route-distinguisher ", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal2RouteTarget" }, ";\n",
+                                 "                vrf-target target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal2RouteTarget" }, ";\n",
+                                 "                vrf-table-label;\n",
+                                 "            }\n",
+                                 "            _contrail_net1-l3-6 {\n",
+                                 "                instance-type vrf;\n",
+                                 "                interface ge-0/0/1.0;\n",
+                                 "                route-distinguisher ", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal1RouteTarget" }, ";\n",
+                                 "                vrf-target target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal1RouteTarget" }, ";\n",
+                                 "                vrf-table-label;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route ", { "Ref": "ContrailOverlayNetworks" }, " discard;\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __interfaces__ {\n",
+                                 "        interfaces {\n",
+                                 "            ge-0/0/0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE000" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE000SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ge-0/0/1 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE001" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE001SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            ge-0/0/2 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address ", { "Ref": "SDNGatewayAZ1PrivateIPGE002" }, "/", { "Ref": "SDNGatewayAZ1PrivateIPGE002SN" }, ";\n", 
+                                 "                    }\n",
+                                 "                    family mpls;\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "            lo0 {\n",
+                                 "                unit 0 {\n",
+                                 "                    family inet {\n",
+                                 "                        address 127.0.0.1/32;\n",
+                                 "                    }\n",
+                                 "                }\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "    __contrail_policy__ {\n",
+                                 "        policy-options {\n",
+                                 "            prefix-list overlay {\n",
+                                 "                ", { "Ref": "ContrailOverlayNetworks" }, ";\n",
+                                 "            }\n",
+                                 "            community target_", { "Ref": "ContrailbgpASN" }, "_", { "Ref": "BareMetal1RouteTarget" }, " members target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal1RouteTarget" }, ";\n",
+                                 "            community target_", { "Ref": "ContrailbgpASN" }, "_", { "Ref": "BareMetal2RouteTarget" }, " members target:", { "Ref": "ContrailbgpASN" }, ":", { "Ref": "BareMetal2RouteTarget" }, ";\n",
+                                 "        }\n",
+                                 "        routing-options {\n",
+                                 "            static {\n",
+                                 "                route ", { "Ref": "ContrailUnderlayNetwork" }, " next-hop ", { "Ref": "SDNGatewayAZ1PrivateIPGE000AWSGW" }, ";\n",
+                                 "            }\n",
+                                 "        }\n",
+                                 "    }\n",
+                                 "}\n",
+                                 "apply-groups [ global __contrail_basic__ __contrail_overlay_bgp__ __contrail_overlay_networking__ __interfaces__ __contrail_policy__ ];\n",
+                                 "#end of config\n"
+                        ]
+                    ]
+                }
+              }
+            }
+        },
+        "Eth0SDNGateway" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "fxp0",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayFXP0PublicIP" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PublicSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "fxp0 Interface"}, {"Key" : "Interface", "Value" : "fxp0"} ]
+          }
+        },
+        "SDNCPDPInterface" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "ge000",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayAZ1PrivateIPGE000" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "PrivateSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "cpdp Interface"}, {"Key" : "Interface", "Value" : "ge000"} ]
+            }
+        },
+        "BareMetal1Interface" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "ge001",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayAZ1PrivateIPGE001" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "BMSubnet1" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Bare Metal Interface 1"}, {"Key" : "Interface", "Value" : "ge001"} ]
+            }
+        },
+        "BareMetal2Interface" : {
+          "Type" : "AWS::EC2::NetworkInterface",
+          "Properties" : {
+            "Description"     : "ge002",
+            "GroupSet"        : [ { "Ref" : "SecurityGroupSDNGW" } ],
+            "PrivateIpAddress" : { "Ref" : "SDNGatewayAZ1PrivateIPGE002" },
+            "SourceDestCheck" : "false",
+            "SubnetId"        : { "Ref" : "BMSubnet2" },
+            "Tags"            : [ {"Key" : "Name", "Value" : "Bare Metal Interface 2"}, {"Key" : "Interface", "Value" : "ge002"} ]
+            }
+        },
+        "BareMetalTestInstance1": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["BMSubnet1"],
+            "Condition": "HasBareMetalServer1Deploy",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "10"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMIBM", { "Ref": "AWS::Region"}, "HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "BareMetalInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SubnetId" : { "Ref" : "BMSubnet1" },
+                "SourceDestCheck" : "false",
+                "SecurityGroupIds" : [ { "Ref" : "SecurityGroupSDNGW" } ], 
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["BareMetalTestInstance1", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                 "#user data here\n",
+                                 "#\n"
+                        ]
+                    ]
+                }
+              }
+            }
+        },
+        "BareMetalTestInstance2": {
+            "Type": "AWS::EC2::Instance",
+            "DependsOn": ["BMSubnet2"],
+            "Condition": "HasBareMetalServer2Deploy",
+            "Properties": {
+                "AvailabilityZone": { "Ref": "AvailabilityZone1" },
+                "BlockDeviceMappings": [{
+                    "DeviceName": "/dev/sda1",
+                    "Ebs": {
+                        "VolumeSize": "10"
+                    }
+                }],
+                "ImageId": {
+                    "Fn::FindInMap": ["AWSRegionArch2AMIBM", { "Ref": "AWS::Region"}, "HVM"]
+                },
+                "InstanceType": {
+                    "Ref": "BareMetalInstanceType"
+                },
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "SubnetId" : { "Ref" : "BMSubnet2" },
+                "SourceDestCheck" : "false",
+                "SecurityGroupIds" : [ { "Ref" : "SecurityGroupSDNGW" } ], 
+                "Tags": [{
+                    "Key": "Name",
+                    "Value": { "Fn::Join": [".", ["BareMetalTestInstance2", { "Ref": "SiteName" }, { "Ref": "AvailabilityZone1" }]] }
+                }],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "", [
+                                 "#user data here\n",
+                                 "#\n"
+                        ]
+                    ]
+                }
+              }
+            }
+        },
+        "IPAssociaton1": {
+            "Type": "AWS::EC2::EIPAssociation",
+            "DependsOn": "SDNGatewayInstance",
+            "Properties": {
+                "NetworkInterfaceId" : { "Ref" : "Eth0SDNGateway" },
+                "AllocationId": {
+                    "Fn::GetAtt": [
+                        "SDNGWFXP0PUBLICIP",
+                        "AllocationId"
+                    ]
+                }
+            }
+        },
+    },
+    "Outputs": {
+        "SDNGatewayFXP0PublicIP": {
+            "Description": "SDN Gateway Public IP",
+            "Value": {
+                "Ref": "SDNGWFXP0PUBLICIP"
+            }
+        },
+        "SDNGatewayFXP0PrivateIP": {
+            "Description": "SDN Gateway FXP0 private (internal) IP",
+            "Value": {
+                "Ref": "SDNGatewayFXP0PublicIP"
+            }
+        },
+        "SDNGatewayAZ1PrivateIPGE000": {
+            "Description": "SDN Gateway WAN IP used by Contrail for control plane and data plane traffic",
+            "Value": {
+                "Ref": "SDNGatewayAZ1PrivateIPGE000"
+            }
+        },
+        "SDNGatewayAZ1PrivateIPGE001": {
+            "Description": "Bare Metal Subnet 1 Gateway IP",
+            "Value": {
+                "Ref": "SDNGatewayAZ1PrivateIPGE001"
+            }
+        },
+        "SDNGatewayAZ1PrivateIPGE002": {
+            "Description": "Bare Metal Subnet 2 Gateway IP",
+            "Value": {
+                "Ref": "SDNGatewayAZ1PrivateIPGE002"
+            }
+        },
+        "BareMetalTestInstance1": {
+            "Condition": "HasBareMetalServer1Deploy",
+            "Description": "IP Address for test bare metal instance 1",
+            "Value": {
+                "Fn::GetAtt": [
+                    "BareMetalTestInstance1",
+                    "PrivateIp"
+                ]
+              }
+        },
+        "BareMetalTestInstance2": {
+            "Condition": "HasBareMetalServer2Deploy",
+            "Description": "IP Address for test bare metal instance 2",
+            "Value": {
+                "Fn::GetAtt": [
+                    "BareMetalTestInstance2",
+                    "PrivateIp"
+                ]
+              }
+        },
+        "SSHtoSDNGateway": {
+            "Description": "SSH to vMX FXP0 command",
+            "Value": { "Fn::Join": [ "", [ "   ssh -i [your ContrailKey1 private key file] jnpr@", {"Ref": "SDNGWFXP0PUBLICIP"}, "" ] ] }
+        },
+        "Hints": {
+            "Description": "The first time you use the vMX your stack will fail. In the cloudformation stack events you will be prompted with a copy paste link, to accept the terms and conditions for the AMI",
+            "Value": NA 
+        }
+    }
+}
