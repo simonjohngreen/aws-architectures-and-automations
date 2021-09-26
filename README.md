@@ -1,13 +1,17 @@
-A collection of AWS Architectures and automation code that deploy them   
+A collection of AWS Architectures and automation code that deploy them     
+    
+Many of these use Tungston Fabric or Contrail as the SDN. The associated config can be removed if SDN is not your thing.     
   
-Many of these use Tungston Fabric or Contrail as the SDN. The associated config can be removed if SDN is not your thing.   
-
-You will find automations in here for Native Kubernetes, OpenShift, Rancher, OpenStack  
-
-Lots and Lots of AWS CloudFormation stack examples in here.  
+You will find automations in here for Native Kubernetes, OpenShift, Rancher, OpenStack    
   
-note: Tungston Fabric is the OpenSource version of Contrail. Contrail requires a license and login password parameters to be set, in order to download the licensed SW. 
-note: OpenShift automations require a Red Hat account in order to download the Software
+Lots and Lots of AWS CloudFormation stack examples in here.    
+    
+note: Tungston Fabric is the OpenSource version of Contrail. Contrail requires a license and login password parameters to be set, in order to download the licensed SW.   
+note: OpenShift automations require a Red Hat account in order to download the Software  
+  
+The stacks are all in directory /deployers  
+The git root and cli* contains exmaple bash scripts for running up the stacks.   
+  
 
 ----------  
 ----------
