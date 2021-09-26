@@ -35,11 +35,11 @@ What does it build:
 2.  Contrail Command
 2.  Three bare metal servers to configure with the contrail command UI, in the steps below we will build a Kubernetes Master with Contrail integrated as the HA CNI. 
 
-![One-Click-Bare-Metal-Simulation-All-In-One](images/HA-Controller.png)
+![One-Click-Bare-Metal-Simulation-All-In-One](../images/HA-Controller.png)
 
 If you set "DeployHighlyAvailable=false" then it will deploy without HA
 
-<img src="images/non-HA-Controller.png" width="200">
+<img src="../images/non-HA-Controller.png" width="200">
 
 -----------------------------
 -----------------------------

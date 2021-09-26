@@ -11,7 +11,7 @@ and/or
 
 Here we are not using the MCGW for internet access. We expose the app directly on a random minion and control the traffic with an AWS SG entry. This is well aligned with the Kubernetes documented method of exposing a service such as an external load balancer.
 
-![One-Click-Bare-Metal-Simulation-Multi-VPC-MCGW](images/BYOT-exposing-public-ip-on-aws.png)
+![One-Click-Bare-Metal-Simulation-Multi-VPC-MCGW](../images/BYOT-exposing-public-ip-on-aws.png)
 
 
 <br/>**********************************************

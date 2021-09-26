@@ -1,7 +1,7 @@
 
 <br/>The figure below shows the use case: stretching SDN networks from on premise DC's out to native AWS services.
 
-<img src="images/vmx-stretch-hl.png" width="800">
+<img src="../images/vmx-stretch-hl.png" width="800">
 
 
 1. Here we have one or more on premise Datacenter's running contrail SDN (OpenStack, Kubernetes, OpenShift, VMWare).
@@ -20,7 +20,7 @@ AWS however will not pass traffic which is not within it's VPC subnets over a tr
 
 So the good news is that here I provide a fully automated stack, no fabric, just click the link and it will build the vMX, configure it as an SDN gateway, then add the supporting AWS resources. All based on the stack parameters you provide it.
 
-<img src="images/vmx-stretch-stack.png" width="800">
+<img src="../images/vmx-stretch-stack.png" width="800">
 
 --------------
 **So what about the on premise DC to AWS VPC connectivity**
@@ -46,7 +46,7 @@ I am going to focus on the AWS side of things. Then explain how to peer your on 
 *I'm using an SRX to handle the IPSEc out to the AWS VPC gateway (could be any type of AWS gateway or peer). 
 *In AWS itself I've deployed my stack which builds a vMX configured as an SDN gateway with underlay breakout, public JunOS cli connectivity (ssh). A private subnet for BGP and MPLSoGRE. Some bare metal networks and test bare metal EC2 instances, so we can see it work. 
 
-<img src="images/vmx-stretch-lab.png" width="800">
+<img src="../images/vmx-stretch-lab.png" width="800">
 
 --------------
 **deployment steps**

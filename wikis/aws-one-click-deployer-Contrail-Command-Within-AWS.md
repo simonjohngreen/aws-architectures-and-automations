@@ -38,7 +38,7 @@ A Contrail Command static route towards the private subnet, then over your AWS g
 All unknown traffic will route towards internet from the Contrail Command instance. 
 If you look inside the stack you will see how I add the static routes and you add your own as well.
 
-![One-Click-Bare-Metal-Simulation-All-In-One](images/ContrailCommand.png)
+![One-Click-Bare-Metal-Simulation-All-In-One](../images/ContrailCommand.png)
 
 How do I use the Contrail Command UI to deploy Contrail plus Kubernetes once its up:
 1.  Connect to the Contrail command UI https://[contrail-command-instance-public-ip]:9091

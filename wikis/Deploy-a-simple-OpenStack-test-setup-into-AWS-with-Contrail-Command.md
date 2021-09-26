@@ -53,11 +53,11 @@ What does it build:
 
 We are deploying this test setup with "DeployHighlyAvailable=false" so it will deploy without HA, as this is good enough for the workshop.
 
-<img src="images/OpenStack-AllInOne.png">
+<img src="../images/OpenStack-AllInOne.png">
 
 You can also set  "DeployHighlyAvailable=true" in which case it will deploy three nodes into three AWS availability zones, ready for Contrail Command to deploy as Highly Available (note: As I do not require this in the workshops I've not tested it fully with this stack yet, I have with other stacks).
 
-<img src="images/HA-Controller.png" width="300">
+<img src="../images/HA-Controller.png" width="300">
 
 
 **OpenStack Build steps follow:**

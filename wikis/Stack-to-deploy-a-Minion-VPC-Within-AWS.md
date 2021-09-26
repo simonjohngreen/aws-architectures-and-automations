@@ -19,7 +19,7 @@ What does it build:
 1.  AWS infrastructure VPC across three availability zones
 2.  Three bare metal servers to configure with the contrail command UI as minions, steps follow.
 
-![One-Click-Bare-Metal-Simulation-All-In-One](images/Minions.png)
+![One-Click-Bare-Metal-Simulation-All-In-One](../images/Minions.png)
 
 Note: If you set "DeployHighlyAvailable=false" then it will only deploy one minion instance.
 
@@ -104,6 +104,6 @@ To check the minion router status, ssh to the minion, "contrail-status"
 
 You have done amazing well to get here. Reflecting on the steps you can probably see the whole setup will only take around 20 minutes next time you deploy. Here is your final architecture.
 
-![Both AWS VPC's combined](images/both-aws-vpcs.png)
+![Both AWS VPC's combined](../images/both-aws-vpcs.png)
 
 

@@ -20,7 +20,7 @@
 <br/>->Deploy Stack
 <br/>2.  Get a coffee, it takes 3 minutes to deploy the server.
 <br/>3.  Once the stack completes you will get this...
-![One-Click-Bare-Metal-Simulation-All-In-One](images/BYOT-brown-field-adding-a-server.png)
+![One-Click-Bare-Metal-Simulation-All-In-One](../images/BYOT-brown-field-adding-a-server.png)
 <br/>4.  Connect to the Contrail command UI https://[contrail-command-instance-public-ip]:9091
 <br/>select the existing cluster id, user=admin password=contrail123 (unless you changed the values prior to deploying)
 <br/>5.  ->Servers->Create

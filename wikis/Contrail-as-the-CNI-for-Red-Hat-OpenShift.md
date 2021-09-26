@@ -12,7 +12,7 @@ There are four planned sections of this wiki.
 Greenfield OpenShift+Contrail deployment, non HA.
 --------------
 
-![One-Click-Bare-Metal-Simulation-All-In-One](images/OpenShift-Contrail-Greenfield.png)
+![One-Click-Bare-Metal-Simulation-All-In-One](../images/OpenShift-Contrail-Greenfield.png)
 
 This stack and procedure deploys the VPCs, gateways, networks, security. 
 Then within deploys and configures a non HA cluster of OpenShift with Contrail SDN as the CNI. Contrail Command for management and access.
@@ -86,7 +86,7 @@ http://django-psql-example-default.router.default.svc.cluster.local
 8) Point your browser to the http shown in the UI and you will see your web app.
 9) This also works for https based apps such as Jenkins.
 
-![Example OpenShift App](images/openshift-app.png)
+![Example OpenShift App](../images/openshift-app.png)
 
 What does this AWS stack build: 
 1.  AWS infrastructure across three availability zones, including OAM access over internet
@@ -128,7 +128,7 @@ note: HA is not ready yet so please leave the switch set to false
 <br/>The nodes (workers) into another VPC and subnets. 
 <br/>If you specify the Same VPC's and Subnets then the instances will all end up deployed together, which also works.
 
-![OpenShift-non-ha-Brownfield](images/OpenShift-non-HA-Brownfield.png)
+![OpenShift-non-ha-Brownfield](../images/OpenShift-non-HA-Brownfield.png)
 
 There are some requirements on the infrastructure we deploy into. 
 1) The VPC needs the following options enabled: EnableDnsHostnames: True and EnableDnsSupport: True
@@ -253,7 +253,7 @@ http://jenkins-default.router.default.svc.cluster.local
 8) Point your browser to the http shown in the UI and you will see your web app.
 9) This also works for https based apps such as Jenkins.
 
-![Example OpenShift App](images/jenkins.png)
+![Example OpenShift App](../images/jenkins.png)
 
 What does this AWS stack build: 
 1.  AWS infrastructure across three availability zones, including OAM access over internet
@@ -282,7 +282,7 @@ Importing your OpenShift cluster into Contrail Command
 <br/>Login to the Contrail Command UI after a few minutes (see stack outputs)
 
 
-![Contrail Comand Dashboard](images/command.png)
+![Contrail Comand Dashboard](../images/command.png)
 
 
 
