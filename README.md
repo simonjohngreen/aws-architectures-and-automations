@@ -20,7 +20,7 @@ Federation: Moving beyond one Kubernetes cluster with tungsten-fabric/Contrail S
 ----------
 ----------
 
-[Click to explore Kubernetes cluster federation using SDN ](wikis/Federation:-Moving-beyond-one-Kubernetes-cluster-with-Contrail-SDN.md)
+[Click to explore Kubernetes cluster federation using SDN ](wikis/Federation--Moving-beyond-one-Kubernetes-cluster-with-Contrail-SDN.md)
 
 <img src="images/federation-1.png" width="700">
 
