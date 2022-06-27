@@ -3,7 +3,7 @@
 --------------
 --------------
 
-<img src="https://svl-ssd-git.juniper.net/sre/aws-one-click-deployers/wikis/images/federation-1.png" width="600">
+<img src="images/federation-1.png" width="600">
 
 
 One Time Setup:
@@ -23,7 +23,7 @@ One Time Setup:
 **Stack1**
 --------------
 
-<img src="https://svl-ssd-git.juniper.net/sre/aws-one-click-deployers/wikis/images/federation-2.png" width="600">
+<img src="images/federation-2.png" width="600">
 
 How to deploy Stack1: Infra for the Federated AllInOne clusters
 1.  Click this link to launch the CloudFormation stack into your account (Ireland)
@@ -62,7 +62,7 @@ It just takes a few minutes to deploy stack1.
 **Stack2**
 --------------
 
-<img src="https://svl-ssd-git.juniper.net/sre/aws-one-click-deployers/wikis/images/federation-5.png" width="600">
+<img src="images/federation-5.png" width="600">
 
 How to deploy Stack2: Auto Scaling group if Contrail+Kubernetes nodes fully configured and ready to use
 1.  Click this link to launch the CloudFormation stack into your account (Ireland)
